@@ -23,28 +23,35 @@
 - [x] Non-interactive mode for CI/scripts
 
 ---
-# v0.2 - Enhanced Diff & Model Selection
 
-**Status:** Planned
+# v0.2 - Enhanced Diff & Context ✅
 
-**Features:**
-- [ ] **Custom base branch/commit comparison**
+**Status:** Completed
+
+**Features Implemented:**
+- [x] **Project rename:** `go-rev-cli` → `rev-cli`
+  - Module path: `github.com/trankhanh040147/rev-cli`
+  - Binary name: `rev-cli`
+- [x] **Custom base branch/commit comparison**
   - `--base <branch>` - Compare against a branch (e.g., `main`, `develop`)
   - `--base <commit>` - Compare against a specific commit hash
-  - `--base main...HEAD` - MR-style diff (changes since branching)
-- [ ] **Update default model** - Change to `gemini-2.5-pro` 
-- [ ] **Show context used** - Display files/tokens being sent (like Cursor's context view)
-- [ ] **Model selection** - Allow user to choose from available models
-	- Show quota tier based on API key
-	- List models available for their API key tier
-	- `--list-models` flag to show available options
-- [ ] **Rename project**: rev-cli
-- [ ] **Dry-run mode** - `--dry-run` to preview payload without calling API
-- [ ] **Token usage display** - Show actual tokens used after review
+  - MR-style diff using `git diff base...HEAD`
+- [x] **Update default model** - Changed to `gemini-2.5-pro`
+- [x] **Show context preview** - Display files/tokens being sent before review
+  - File list with sizes
+  - Total file count and size
+  - Ignored files list
+  - Token estimate
+- [x] **Token usage display** - Show actual tokens used after review
+  - Prompt tokens
+  - Completion tokens
+  - Total tokens
 
 **Breaking Changes:**
-- Binary name change (if renamed)
-- Default model change
+- Binary renamed: `go-rev-cli` → `rev-cli`
+- Module path changed: `github.com/trankhanh040147/go-rev-cli` → `github.com/trankhanh040147/rev-cli`
+- Default model changed: `gemini-1.5-flash` → `gemini-2.5-pro`
+
 ---
 
 # v0.3 - Interactive Setup & Customization
@@ -52,6 +59,9 @@
 **Status:** Planned
 
 **Features:**
+- [ ] **Dry-run mode** - `--dry-run` to preview payload without calling API
+- [ ] **Model selection** - Allow user to choose from available models
+  - `--list-models` flag to show available options
 - [ ] **Interactive setup wizard** - After `review` command, prompt user to:
   - Select target branch (from list of branches)
   - Enter custom prompt/instructions (optional)

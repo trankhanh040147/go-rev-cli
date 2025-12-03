@@ -1,19 +1,21 @@
-# go-rev-cli
+# rev-cli
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/trankhanh040147/go-rev-cli)](https://goreportcard.com/report/github.com/trankhanh040147/go-rev-cli)
+[![Go Report Card](https://goreportcard.com/badge/github.com/trankhanh040147/rev-cli)](https://goreportcard.com/report/github.com/trankhanh040147/rev-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **Gemini-powered code reviewer CLI for Go developers.**
+> **Gemini-powered code reviewer CLI.**
 
-**go-rev-cli** is a local command-line tool that acts as an intelligent peer reviewer. It reads your local git changes and uses Google's Gemini LLM to analyze your code for bugs, optimization opportunities, and idiomatic Go practices—all before you push a single commit.
+**rev-cli** is a local command-line tool that acts as an intelligent peer reviewer. It reads your local git changes and uses Google's Gemini LLM to analyze your code for bugs, optimization opportunities, and best practices—all before you push a single commit.
 
 ## Features
 
 - **Smart Context:** Analyzes `git diff` plus full file contents to understand exactly what you changed and where it fits.
+- **Branch Comparison:** Compare against any branch or commit with `--base` flag (perfect for MR/PR reviews).
+- **Context Preview:** See exactly which files and how many tokens will be sent before the review.
+- **Token Usage Display:** Track actual token usage after each review.
 - **Privacy-First:** Runs locally with built-in secret detection to prevent accidentally sending credentials to the LLM.
 - **Interactive Chat:** Ask follow-up questions about the review in an interactive TUI.
-- **Performance:** Focused on analyzing specific changes rather than the entire codebase to save tokens and time.
-- **Gemini Integration:** Leverages the large context window and reasoning of Gemini 1.5 Flash/Pro.
+- **Gemini Integration:** Leverages the large context window and reasoning of Gemini 2.5 Pro.
 
 ## Prerequisites
 
@@ -28,15 +30,27 @@ Before using the tool, ensure you have the following installed:
 You can install the tool directly using `go install`:
 
 ```bash
-go install github.com/trankhanh040147/go-rev-cli@latest
+go install github.com/trankhanh040147/rev-cli@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/trankhanh040147/go-rev-cli.git
-cd go-rev-cli
-go build -o go-rev-cli .
+git clone https://github.com/trankhanh040147/rev-cli.git
+cd rev-cli
+make build
+```
+
+### Upgrading from go-rev-cli
+
+If you previously installed `go-rev-cli`:
+
+```bash
+# Remove old version
+rm $(which go-rev-cli)
+
+# Install new version
+go install github.com/trankhanh040147/rev-cli@latest
 ```
 
 ## Configuration
@@ -56,7 +70,22 @@ Or pass it directly via the `--api-key` flag.
 Review all uncommitted changes in your repository:
 
 ```bash
-go-rev-cli review
+rev-cli review
+```
+
+### Review Against a Branch (MR/PR Style)
+
+Compare your current changes against a base branch - perfect for merge request reviews:
+
+```bash
+# Compare against main branch
+rev-cli review --base main
+
+# Compare against develop branch
+rev-cli review --base develop
+
+# Compare against a specific commit
+rev-cli review --base abc1234
 ```
 
 ### Review Staged Changes Only
@@ -64,15 +93,15 @@ go-rev-cli review
 Review only the changes you've staged for commit:
 
 ```bash
-go-rev-cli review --staged
+rev-cli review --staged
 ```
 
 ### Use a Specific Model
 
-Choose between `gemini-1.5-flash` (faster, cheaper) or `gemini-1.5-pro` (more thorough):
+The default model is `gemini-2.5-pro`. You can also use other models:
 
 ```bash
-go-rev-cli review --model gemini-1.5-pro
+rev-cli review --model gemini-1.5-flash
 ```
 
 ### Non-Interactive Mode
@@ -80,7 +109,7 @@ go-rev-cli review --model gemini-1.5-pro
 Get the review output without the interactive chat interface:
 
 ```bash
-go-rev-cli review --no-interactive
+rev-cli review --no-interactive
 ```
 
 ### Skip Secret Detection
@@ -88,7 +117,7 @@ go-rev-cli review --no-interactive
 If you're confident there are no secrets in your code (use with caution):
 
 ```bash
-go-rev-cli review --force
+rev-cli review --force
 ```
 
 ## Interactive Mode
@@ -100,10 +129,41 @@ When running in interactive mode (default), you can:
 - **Navigate:** Use arrow keys or scroll to navigate the review
 - **Exit:** Press `q` to quit, `Esc` to exit chat mode
 
+## Context Preview
+
+Before sending to the API, rev-cli shows you exactly what will be reviewed:
+
+```
+📋 Review Context
+─────────────────
+
+📁 Files to review:
+   • internal/api/handler.go (2.3 KB)
+   • internal/api/middleware.go (1.1 KB)
+   • cmd/server.go (856 B)
+
+   Total: 3 files, 4.3 KB
+
+🚫 Ignored files:
+   • go.sum
+   • internal/api/handler_test.go
+
+📊 Token Estimate: ~1,250 tokens
+```
+
+## Token Usage
+
+After each review, you'll see the actual token usage:
+
+```
+✓ Review completed in 3.2s
+📊 Token Usage: 1,247 prompt + 892 completion = 2,139 total
+```
+
 ## What Gets Reviewed
 
 The tool analyzes:
-- All modified `.go` files
+- All modified source files
 - The git diff showing exact changes
 - Full file context for better understanding
 
@@ -127,23 +187,25 @@ If potential secrets are detected, the review is aborted unless `--force` is use
 
 ## Review Focus Areas
 
-The AI reviewer acts as a Senior Go Engineer and focuses on:
+The AI reviewer acts as a Senior Engineer and focuses on:
 
 1. **Bug Detection** - Logic errors, nil pointer dereferences, race conditions
-2. **Idiomatic Go Patterns** - Error handling, interface design, naming conventions
+2. **Idiomatic Patterns** - Best practices for your language
 3. **Performance Optimizations** - Unnecessary allocations, inefficient loops
-4. **Security Concerns** - Input validation, SQL injection risks
+4. **Security Concerns** - Input validation, injection risks
 5. **Code Quality** - Readability, documentation, test coverage suggestions
 
 ## Example Output
 
 ```
-🔍 Go Code Review
+🔍 Code Review
 
-📋 Review Context:
-   • Files to review: 3
-   • Files ignored: 2
-   • Estimated tokens: ~2,500
+📋 Review Context
+─────────────────
+📁 Files to review:
+   • internal/api/handler.go (2.3 KB)
+
+📊 Token Estimate: ~850 tokens
 
 ### Summary
 The changes implement a new user authentication handler...
@@ -155,7 +217,21 @@ The changes implement a new user authentication handler...
 
 ### Code Suggestions
 ...
+
+✓ Review completed in 2.8s
+📊 Token Usage: 847 prompt + 523 completion = 1,370 total
 ```
+
+## Command Reference
+
+| Flag | Description |
+|------|-------------|
+| `--base <ref>` | Base branch/commit to compare against |
+| `--staged` | Review only staged changes |
+| `--model <name>` | Gemini model (default: gemini-2.5-pro) |
+| `--force` | Skip secret detection |
+| `--no-interactive` | Disable interactive TUI |
+| `--api-key <key>` | Override GEMINI_API_KEY |
 
 ## Contributing
 

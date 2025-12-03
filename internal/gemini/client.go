@@ -12,10 +12,18 @@ import (
 
 // Client wraps the Gemini API client
 type Client struct {
-	client  *genai.Client
-	model   *genai.GenerativeModel
-	chat    *genai.ChatSession
-	modelID string
+	client    *genai.Client
+	model     *genai.GenerativeModel
+	chat      *genai.ChatSession
+	modelID   string
+	lastUsage *TokenUsage
+}
+
+// TokenUsage contains token usage information from a response
+type TokenUsage struct {
+	PromptTokens     int32
+	CompletionTokens int32
+	TotalTokens      int32
 }
 
 // StreamCallback is called for each chunk of streamed response
@@ -93,6 +101,7 @@ func (c *Client) SendMessageStream(ctx context.Context, message string, callback
 	iter := c.chat.SendMessageStream(ctx, genai.Text(message))
 
 	var fullResponse string
+	var lastResp *genai.GenerateContentResponse
 	for {
 		resp, err := iter.Next()
 		if err == iterator.Done {
@@ -102,11 +111,17 @@ func (c *Client) SendMessageStream(ctx context.Context, message string, callback
 			return fullResponse, fmt.Errorf("stream error: %w", err)
 		}
 
+		lastResp = resp
 		chunk := extractText(resp)
 		fullResponse += chunk
 		if callback != nil {
 			callback(chunk)
 		}
+	}
+
+	// Extract token usage from the last response
+	if lastResp != nil {
+		c.lastUsage = extractUsage(lastResp)
 	}
 
 	return fullResponse, nil
@@ -202,3 +217,29 @@ func (c *Client) GetModelID() string {
 	return c.modelID
 }
 
+// GetLastUsage returns the token usage from the last API call
+func (c *Client) GetLastUsage() *TokenUsage {
+	return c.lastUsage
+}
+
+// extractUsage extracts token usage from a response
+func extractUsage(resp *genai.GenerateContentResponse) *TokenUsage {
+	if resp == nil || resp.UsageMetadata == nil {
+		return nil
+	}
+
+	return &TokenUsage{
+		PromptTokens:     resp.UsageMetadata.PromptTokenCount,
+		CompletionTokens: resp.UsageMetadata.CandidatesTokenCount,
+		TotalTokens:      resp.UsageMetadata.TotalTokenCount,
+	}
+}
+
+// FormatUsage returns a formatted string of token usage
+func (u *TokenUsage) FormatUsage() string {
+	if u == nil {
+		return "Token usage not available"
+	}
+	return fmt.Sprintf("Tokens: %d prompt + %d completion = %d total",
+		u.PromptTokens, u.CompletionTokens, u.TotalTokens)
+}

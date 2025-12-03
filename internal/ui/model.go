@@ -12,9 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	appcontext "github.com/trankhanh040147/go-rev-cli/internal/context"
-	"github.com/trankhanh040147/go-rev-cli/internal/gemini"
-	"github.com/trankhanh040147/go-rev-cli/internal/prompt"
+	appcontext "github.com/trankhanh040147/rev-cli/internal/context"
+	"github.com/trankhanh040147/rev-cli/internal/gemini"
+	"github.com/trankhanh040147/rev-cli/internal/prompt"
 )
 
 // State represents the current state of the application
@@ -347,7 +347,7 @@ func RunSimple(ctx context.Context, reviewCtx *appcontext.ReviewContext, client 
 	// Initialize chat
 	client.StartChat(appcontext.GetSystemPrompt())
 
-	fmt.Println(RenderTitle("🔍 Go Code Review"))
+	fmt.Println(RenderTitle("🔍 Code Review"))
 	fmt.Println(RenderSubtitle(reviewCtx.Summary()))
 	fmt.Println()
 	fmt.Println("Analyzing your code changes...")
@@ -384,6 +384,10 @@ func RunSimple(ctx context.Context, reviewCtx *appcontext.ReviewContext, client 
 	fmt.Println()
 	fmt.Println(RenderSuccess(fmt.Sprintf("Review completed in %s", elapsed.Round(time.Millisecond))))
 
+	// Display token usage
+	if usage := client.GetLastUsage(); usage != nil {
+		fmt.Println(RenderTokenUsage(usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens))
+	}
+
 	return nil
 }
-

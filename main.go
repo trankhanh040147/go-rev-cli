@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/trankhanh040147/go-rev-cli/cmd"
+	"github.com/trankhanh040147/rev-cli/cmd"
 )
 
 func main() {
@@ -11,4 +11,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-

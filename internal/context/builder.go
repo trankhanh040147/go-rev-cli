@@ -2,10 +2,11 @@ package context
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/trankhanh040147/go-rev-cli/internal/filter"
-	"github.com/trankhanh040147/go-rev-cli/internal/git"
-	"github.com/trankhanh040147/go-rev-cli/internal/prompt"
+	"github.com/trankhanh040147/rev-cli/internal/filter"
+	"github.com/trankhanh040147/rev-cli/internal/git"
+	"github.com/trankhanh040147/rev-cli/internal/prompt"
 )
 
 // ReviewContext contains all the data needed for a code review
@@ -26,22 +27,24 @@ type ReviewContext struct {
 
 // Builder constructs the review context from git changes
 type Builder struct {
-	staged bool
-	force  bool
+	staged     bool
+	force      bool
+	baseBranch string
 }
 
 // NewBuilder creates a new context builder
-func NewBuilder(staged, force bool) *Builder {
+func NewBuilder(staged, force bool, baseBranch string) *Builder {
 	return &Builder{
-		staged: staged,
-		force:  force,
+		staged:     staged,
+		force:      force,
+		baseBranch: baseBranch,
 	}
 }
 
 // Build gathers git changes and assembles the review context
 func (b *Builder) Build() (*ReviewContext, error) {
 	// Step 1: Get git diff and file contents
-	diffResult, err := git.GetDiff(b.staged)
+	diffResult, err := git.GetDiff(b.staged, b.baseBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get git diff: %w", err)
 	}
@@ -117,8 +120,61 @@ func (rc *ReviewContext) Summary() string {
 	return summary
 }
 
+// DetailedSummary returns a detailed summary including file list
+func (rc *ReviewContext) DetailedSummary() string {
+	var sb strings.Builder
+
+	sb.WriteString("📋 Review Context\n")
+	sb.WriteString("─────────────────\n\n")
+
+	// Files to review
+	sb.WriteString("📁 Files to review:\n")
+	if len(rc.FileContents) == 0 {
+		sb.WriteString("   (none)\n")
+	} else {
+		totalSize := 0
+		for path, content := range rc.FileContents {
+			size := len(content)
+			totalSize += size
+			sb.WriteString(fmt.Sprintf("   • %s (%s)\n", path, formatBytes(size)))
+		}
+		sb.WriteString(fmt.Sprintf("\n   Total: %d files, %s\n", len(rc.FileContents), formatBytes(totalSize)))
+	}
+
+	// Ignored files
+	if len(rc.IgnoredFiles) > 0 {
+		sb.WriteString("\n🚫 Ignored files:\n")
+		for _, path := range rc.IgnoredFiles {
+			sb.WriteString(fmt.Sprintf("   • %s\n", path))
+		}
+	}
+
+	// Token estimate
+	sb.WriteString(fmt.Sprintf("\n📊 Token Estimate: ~%d tokens\n", rc.EstimatedTokens))
+
+	// Token warning
+	if warning := prompt.MaxTokenWarning(rc.UserPrompt, 100000); warning != "" {
+		sb.WriteString(fmt.Sprintf("⚠️  %s\n", warning))
+	}
+
+	return sb.String()
+}
+
+// formatBytes formats bytes into human readable format
+func formatBytes(bytes int) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := int64(bytes) / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
 // HasChanges returns true if there are changes to review
 func (rc *ReviewContext) HasChanges() bool {
 	return len(rc.FileContents) > 0 || rc.RawDiff != ""
 }
-

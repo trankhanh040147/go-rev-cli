@@ -21,14 +21,24 @@ type DiffResult struct {
 }
 
 // GetDiff extracts the git diff and reads modified file contents
-func GetDiff(staged bool) (*DiffResult, error) {
+// If baseBranch is provided, compares against that branch/commit
+// If staged is true, compares staged changes against HEAD
+// Otherwise, compares working directory against HEAD
+func GetDiff(staged bool, baseBranch string) (*DiffResult, error) {
 	// Check if we're in a git repository
 	if err := checkGitRepo(); err != nil {
 		return nil, err
 	}
 
+	// Validate base branch if provided
+	if baseBranch != "" {
+		if err := validateRef(baseBranch); err != nil {
+			return nil, fmt.Errorf("invalid base reference '%s': %w", baseBranch, err)
+		}
+	}
+
 	// Get the raw diff
-	rawDiff, err := getRawDiff(staged)
+	rawDiff, err := getRawDiff(staged, baseBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get git diff: %w", err)
 	}
@@ -67,12 +77,31 @@ func checkGitRepo() error {
 	return nil
 }
 
+// validateRef checks if a git reference (branch/commit) exists
+func validateRef(ref string) error {
+	cmd := exec.Command("git", "rev-parse", "--verify", ref)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("reference not found")
+	}
+	return nil
+}
+
 // getRawDiff runs git diff and returns the output
-func getRawDiff(staged bool) (string, error) {
+// Supports three modes:
+// 1. baseBranch provided: git diff <base>...HEAD (MR-style, changes since branching)
+// 2. staged: git diff --staged (staged changes vs HEAD)
+// 3. default: git diff (working directory vs HEAD)
+func getRawDiff(staged bool, baseBranch string) (string, error) {
 	args := []string{"diff"}
-	if staged {
+
+	if baseBranch != "" {
+		// MR-style diff: show changes between merge-base and HEAD
+		// This shows what would be merged, not just the tip difference
+		args = append(args, baseBranch+"...HEAD")
+	} else if staged {
 		args = append(args, "--staged")
 	}
+
 	// Add unified diff format for better context
 	args = append(args, "-U3")
 
@@ -151,4 +180,3 @@ func getGitRoot() (string, error) {
 func GetGitRoot() (string, error) {
 	return getGitRoot()
 }
-

@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	appcontext "github.com/trankhanh040147/go-rev-cli/internal/context"
-	"github.com/trankhanh040147/go-rev-cli/internal/filter"
-	"github.com/trankhanh040147/go-rev-cli/internal/gemini"
-	"github.com/trankhanh040147/go-rev-cli/internal/ui"
+	appcontext "github.com/trankhanh040147/rev-cli/internal/context"
+	"github.com/trankhanh040147/rev-cli/internal/filter"
+	"github.com/trankhanh040147/rev-cli/internal/gemini"
+	"github.com/trankhanh040147/rev-cli/internal/ui"
 )
 
 var (
@@ -18,6 +18,7 @@ var (
 	model       string
 	force       bool
 	interactive bool
+	baseBranch  string
 )
 
 // reviewCmd represents the review command
@@ -30,16 +31,19 @@ and ensure idiomatic Go practices.
 
 Examples:
   # Review staged changes with interactive chat
-  go-rev-cli review --staged
+  rev-cli review --staged
+
+  # Review changes against main branch
+  rev-cli review --base main
 
   # Review all uncommitted changes with a specific model
-  go-rev-cli review --model gemini-1.5-pro
+  rev-cli review --model gemini-2.5-pro
 
   # Non-interactive mode (just print the review)
-  go-rev-cli review --no-interactive
+  rev-cli review --no-interactive
 
   # Skip secret detection check
-  go-rev-cli review --force`,
+  rev-cli review --force`,
 	RunE: runReview,
 }
 
@@ -47,7 +51,8 @@ func init() {
 	rootCmd.AddCommand(reviewCmd)
 
 	reviewCmd.Flags().BoolVar(&staged, "staged", false, "Review only staged changes (git diff --staged)")
-	reviewCmd.Flags().StringVar(&model, "model", "gemini-1.5-flash", "Gemini model to use (gemini-1.5-flash or gemini-1.5-pro)")
+	reviewCmd.Flags().StringVar(&baseBranch, "base", "", "Base branch/commit to compare against (e.g., main, develop, abc123)")
+	reviewCmd.Flags().StringVar(&model, "model", "gemini-2.5-pro", "Gemini model to use (gemini-2.5-pro, gemini-1.5-flash, etc.)")
 	reviewCmd.Flags().BoolVar(&force, "force", false, "Skip secret detection and proceed anyway")
 	reviewCmd.Flags().BoolVar(&interactive, "interactive", true, "Enable interactive chat mode")
 	reviewCmd.Flags().BoolVar(&interactive, "no-interactive", false, "Disable interactive chat mode")
@@ -68,12 +73,24 @@ func runReview(cmd *cobra.Command, args []string) error {
 	// Create context
 	ctx := context.Background()
 
-	// Step 1: Build the review context
-	fmt.Println(ui.RenderTitle("🔍 Go Code Review"))
-	fmt.Println()
-	fmt.Println("Gathering code changes...")
+	// Validate mutually exclusive flags
+	if staged && baseBranch != "" {
+		return fmt.Errorf("cannot use --staged and --base together. Choose one")
+	}
 
-	builder := appcontext.NewBuilder(staged, force)
+	// Step 1: Build the review context
+	fmt.Println(ui.RenderTitle("🔍 Code Review"))
+	fmt.Println()
+
+	if baseBranch != "" {
+		fmt.Printf("Comparing against: %s\n", baseBranch)
+	} else if staged {
+		fmt.Println("Reviewing staged changes...")
+	} else {
+		fmt.Println("Reviewing uncommitted changes...")
+	}
+
+	builder := appcontext.NewBuilder(staged, force, baseBranch)
 	reviewCtx, err := builder.Build()
 	if err != nil {
 		// Check if it's a secrets error
@@ -90,9 +107,10 @@ func runReview(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Print summary
+	// Print detailed summary with file list
 	fmt.Println(ui.RenderSuccess("Changes collected!"))
-	fmt.Println(reviewCtx.Summary())
+	fmt.Println()
+	fmt.Println(reviewCtx.DetailedSummary())
 	fmt.Println()
 
 	// Step 2: Initialize Gemini client
