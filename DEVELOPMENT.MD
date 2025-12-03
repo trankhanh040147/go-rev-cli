@@ -130,4 +130,8 @@
 - Plugin system for custom analyzers
 - Integration with SonarQube/CodeClimate
 
+- Choose style to review (reivew mistakes only, review logics,...)
+- Can navigate through each reviews
+- Can reject/accept reviews
+- Can add reviews to ignore list 
 ---
