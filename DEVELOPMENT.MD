@@ -130,8 +130,19 @@
 - Plugin system for custom analyzers
 - Integration with SonarQube/CodeClimate
 
+# Unreviewd/New ideas
 - Choose style to review (reivew mistakes only, review logics,...)
 - Can navigate through each reviews
 - Can reject/accept reviews
 - Can add reviews to ignore list 
+- Can easily copy reviews
+- Support press ? to open keymap helps 
+- Breaking change: Panes management mode (like lazy-git, lazy-docker) --> reviews pane, conversations/projects pane, config pane (model, api_key, style,...),... (other feature pane)
+- Token robin rotation: Allow user use multiple api keys and rotate automatically
+- Allow search and navigate through in reviews (like Vim)
+- Blacklist style reviews --> Allow add review style to blacklist (global/conversation)
+
+# Bugs
+  - can not navigate properly after reviews
+- Large of redundant spaces below the terminal
 ---
