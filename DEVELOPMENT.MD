@@ -130,8 +130,18 @@
 - Plugin system for custom analyzers
 - Integration with SonarQube/CodeClimate
 
-# Unreviewd/New ideas
-- Choose style to review (reivew mistakes only, review logics,...)
+# <project_styles>
+- ! Vim style prefer --> Every navigation should adapt Vim style 
+- flags should be short for easy typing 
+
+# <new_ideas>
+- Refactor flags, adapting <project_styles>. For example: --force --> -f/--f ?, --interactive --> -i/--i/--int??
+- Yank to clipboard:
+  - Can quickly yank latest review
+  - Can yank specified code block 
+- Choose style to review (reivew mistakes only, review logics,...): Preset + custom 
+- Export to files --> Save conversations to files/folders, support navigate to folder of current conversation
+- User can manage configs: api_keys, review style, default mode (--interactive = true ?, ...)
 - Can navigate through each reviews
 - Can reject/accept reviews
 - Can add reviews to ignore list 
@@ -141,6 +151,10 @@
 - Token robin rotation: Allow user use multiple api keys and rotate automatically
 - Allow search and navigate through in reviews (like Vim)
 - Blacklist style reviews --> Allow add review style to blacklist (global/conversation)
+- Build mode: 
+  - Read from files and generate as request, with some built-in options: Write docs (need to reed controller, serializers), Generate Postman collections (need to reed controller, serializers, routers),...
+  - Users can choose which files/folders to read (interactive select with Vim navigation)
+- Interview mode: Users can practice interview questions with AI
 
 # Bugs
   - can not navigate properly after reviews
