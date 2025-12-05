@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -49,4 +51,23 @@ type TickMsg struct{}
 
 // QuitMsg signals the program should quit
 type QuitMsg struct{}
+
+// YankMsg signals that content was yanked to clipboard
+type YankMsg struct {
+	Content string
+	Type    string // "review" or "codeblock"
+}
+
+// YankFeedbackMsg signals that yank feedback should be cleared
+type YankFeedbackMsg struct{}
+
+// ClearYankFeedbackCmd creates a command to clear yank feedback after a delay
+func ClearYankFeedbackCmd(duration time.Duration) tea.Cmd {
+	return tea.Tick(duration, func(t time.Time) tea.Msg {
+		return YankFeedbackMsg{}
+	})
+}
+
+// yankTimeoutMsg signals that the yank combo timeout has elapsed
+type yankTimeoutMsg struct{}
 

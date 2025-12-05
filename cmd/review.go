@@ -10,6 +10,7 @@ import (
 	appcontext "github.com/trankhanh040147/revcli/internal/context"
 	"github.com/trankhanh040147/revcli/internal/filter"
 	"github.com/trankhanh040147/revcli/internal/gemini"
+	"github.com/trankhanh040147/revcli/internal/preset"
 	"github.com/trankhanh040147/revcli/internal/ui"
 )
 
@@ -19,6 +20,7 @@ var (
 	force       bool
 	interactive bool
 	baseBranch  string
+	presetName  string
 )
 
 // reviewCmd represents the review command
@@ -50,12 +52,13 @@ Examples:
 func init() {
 	rootCmd.AddCommand(reviewCmd)
 
-	reviewCmd.Flags().BoolVar(&staged, "staged", false, "Review only staged changes (git diff --staged)")
-	reviewCmd.Flags().StringVar(&baseBranch, "base", "", "Base branch/commit to compare against (e.g., main, develop, abc123)")
-	reviewCmd.Flags().StringVar(&model, "model", "gemini-2.5-pro", "Gemini model to use (gemini-2.5-pro, gemini-1.5-flash, etc.)")
-	reviewCmd.Flags().BoolVar(&force, "force", false, "Skip secret detection and proceed anyway")
-	reviewCmd.Flags().BoolVar(&interactive, "interactive", true, "Enable interactive chat mode")
-	reviewCmd.Flags().BoolVar(&interactive, "no-interactive", false, "Disable interactive chat mode")
+	reviewCmd.Flags().BoolVarP(&staged, "staged", "s", false, "Review only staged changes (git diff --staged)")
+	reviewCmd.Flags().StringVarP(&baseBranch, "base", "b", "", "Base branch/commit to compare against (e.g., main, develop, abc123)")
+	reviewCmd.Flags().StringVarP(&model, "model", "m", "gemini-2.5-pro", "Gemini model to use (gemini-2.5-pro, gemini-1.5-flash, etc.)")
+	reviewCmd.Flags().BoolVarP(&force, "force", "f", false, "Skip secret detection and proceed anyway")
+	reviewCmd.Flags().BoolVarP(&interactive, "interactive", "i", true, "Enable interactive chat mode")
+	reviewCmd.Flags().BoolP("no-interactive", "I", false, "Disable interactive chat mode")
+	reviewCmd.Flags().StringVarP(&presetName, "preset", "p", "", "Review preset (quick, strict, security, performance, logic, style, typo, naming)")
 }
 
 func runReview(cmd *cobra.Command, args []string) error {
@@ -78,9 +81,23 @@ func runReview(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot use --staged and --base together. Choose one")
 	}
 
+	// Validate and load preset if specified
+	var activePreset *preset.Preset
+	if presetName != "" {
+		var err error
+		activePreset, err = preset.Get(presetName)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Step 1: Build the review context
 	fmt.Println(ui.RenderTitle("🔍 Code Review"))
 	fmt.Println()
+
+	if activePreset != nil {
+		fmt.Printf("Using preset: %s (%s)\n", activePreset.Name, activePreset.Description)
+	}
 
 	if baseBranch != "" {
 		fmt.Printf("Comparing against: %s\n", baseBranch)
@@ -127,11 +144,11 @@ func runReview(cmd *cobra.Command, args []string) error {
 	// Step 3: Run the review
 	if interactive {
 		// Interactive TUI mode
-		return ui.Run(reviewCtx, client)
+		return ui.Run(reviewCtx, client, activePreset)
 	}
 
 	// Non-interactive mode
-	return ui.RunSimple(ctx, reviewCtx, client)
+	return ui.RunSimple(ctx, reviewCtx, client, activePreset)
 }
 
 // printSecretsWarning prints a warning about detected secrets

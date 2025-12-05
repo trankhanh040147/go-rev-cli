@@ -85,6 +85,7 @@
   | `--interactive` | `-i` | Interactive mode |
   | `--no-interactive` | `-I` | Non-interactive mode |
   | `--api-key` | `-k` | API key |
+- Add version flag
 
 ### Vim-Style Keybindings
 - [ ] Navigation: `j/k` (down/up), `g/G` (top/bottom), `Ctrl+d/u` (half-page)
@@ -98,7 +99,7 @@
 
 ### Review Presets
 - [ ] `--preset <name>` - Use predefined review style
-- [ ] Built-in presets: `strict`, `security`, `performance`, `quick`
+- [ ] Built-in presets: `strict`, `security`, `performance`, `quick`, `logic`, `style`, `typo`, `naming`,...
 - [ ] Custom presets in `~/.config/revcli/presets/`
 
 ---

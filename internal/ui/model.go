@@ -3,17 +3,21 @@ package ui
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	appcontext "github.com/trankhanh040147/revcli/internal/context"
 	"github.com/trankhanh040147/revcli/internal/gemini"
+	"github.com/trankhanh040147/revcli/internal/preset"
 	"github.com/trankhanh040147/revcli/internal/prompt"
 )
 
@@ -24,6 +28,8 @@ const (
 	StateLoading State = iota
 	StateReviewing
 	StateChatting
+	StateSearching
+	StateHelp
 	StateError
 	StateQuitting
 )
@@ -31,7 +37,8 @@ const (
 // Model represents the application state for Bubbletea
 type Model struct {
 	// State machine
-	state State
+	state         State
+	previousState State // For returning from search/help overlays
 
 	// Review context
 	reviewCtx *appcontext.ReviewContext
@@ -41,14 +48,22 @@ type Model struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	// Review preset
+	preset *preset.Preset
+
 	// UI components
-	spinner  spinner.Model
-	viewport viewport.Model
-	textarea textarea.Model
-	renderer *Renderer
+	spinner     spinner.Model
+	viewport    viewport.Model
+	textarea    textarea.Model
+	searchInput textinput.Model
+	renderer    *Renderer
+
+	// Search state
+	search *SearchState
 
 	// Content
 	reviewResponse  string
+	rawContent      string // Original content without search highlighting
 	streamedContent string
 	errorMsg        string
 	chatHistory     []ChatMessage
@@ -60,6 +75,10 @@ type Model struct {
 	// Flags
 	ready     bool
 	streaming bool
+
+	// Yank state
+	yankFeedback string // Feedback message for yank
+	lastKeyWasY  bool   // For detecting "yb" combo
 }
 
 // ChatMessage represents a message in the chat history
@@ -69,7 +88,7 @@ type ChatMessage struct {
 }
 
 // NewModel creates a new application model
-func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client) Model {
+func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, p *preset.Preset) Model {
 	// Create spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -84,6 +103,12 @@ func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client) Model 
 	ta.SetHeight(3)
 	ta.ShowLineNumbers = false
 
+	// Create search input
+	si := textinput.New()
+	si.Placeholder = "Search..."
+	si.CharLimit = 100
+	si.Width = 40
+
 	// Create renderer
 	renderer, _ := NewRenderer()
 
@@ -91,16 +116,19 @@ func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client) Model 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return Model{
-		state:     StateLoading,
-		reviewCtx: reviewCtx,
-		client:    client,
-		ctx:       ctx,
-		cancel:    cancel,
-		spinner:   s,
-		textarea:  ta,
-		renderer:  renderer,
-		ready:     false,
-		streaming: false,
+		state:       StateLoading,
+		reviewCtx:   reviewCtx,
+		client:      client,
+		ctx:         ctx,
+		cancel:      cancel,
+		preset:      p,
+		spinner:     s,
+		textarea:    ta,
+		searchInput: si,
+		search:      NewSearchState(),
+		renderer:    renderer,
+		ready:       false,
+		streaming:   false,
 	}
 }
 
@@ -115,8 +143,12 @@ func (m Model) Init() tea.Cmd {
 // startReview initiates the code review
 func (m Model) startReview() tea.Cmd {
 	return func() tea.Msg {
-		// Initialize chat with system prompt
-		m.client.StartChat(appcontext.GetSystemPrompt())
+		// Initialize chat with system prompt (with preset if specified)
+		systemPrompt := appcontext.GetSystemPrompt()
+		if m.preset != nil {
+			systemPrompt = appcontext.GetSystemPromptWithPreset(m.preset.Prompt)
+		}
+		m.client.StartChat(systemPrompt)
 
 		// Send the review request with streaming
 		var fullResponse strings.Builder
@@ -139,6 +171,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle search mode input
+		if m.state == StateSearching {
+			switch msg.String() {
+			case "esc":
+				// Exit search mode, keep results
+				m.state = m.previousState
+				m.searchInput.Blur()
+				return m, nil
+			case "enter":
+				// Confirm search and exit search mode
+				m.search.Query = m.searchInput.Value()
+				m.search.Search(m.rawContent)
+				m.state = m.previousState
+				m.searchInput.Blur()
+				m.updateViewportWithSearch()
+				return m, nil
+			case "tab":
+				// Toggle search mode
+				m.search.ToggleMode()
+				m.updateViewportWithSearch()
+				return m, nil
+			default:
+				// Update search input
+				var cmd tea.Cmd
+				m.searchInput, cmd = m.searchInput.Update(msg)
+				// Live search as user types
+				m.search.Query = m.searchInput.Value()
+				m.search.Search(m.rawContent)
+				m.updateViewportWithSearch()
+				return m, cmd
+			}
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			if m.state != StateChatting || m.textarea.Value() == "" {
@@ -146,6 +211,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 		case "esc":
+			if m.state == StateHelp {
+				m.state = m.previousState
+				return m, nil
+			}
 			if m.state == StateChatting {
 				m.state = StateReviewing
 				return m, nil
@@ -164,6 +233,98 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.chatHistory = append(m.chatHistory, ChatMessage{Role: "user", Content: question})
 					return m, m.sendChatMessage(question)
 				}
+			}
+
+		// Help overlay
+		case "?":
+			if m.state == StateReviewing || m.state == StateChatting {
+				m.previousState = m.state
+				m.state = StateHelp
+				return m, nil
+			} else if m.state == StateHelp {
+				m.state = m.previousState
+				return m, nil
+			}
+
+		// Search mode
+		case "/":
+			if m.state == StateReviewing {
+				m.previousState = m.state
+				m.state = StateSearching
+				m.searchInput.SetValue(m.search.Query)
+				m.searchInput.Focus()
+				return m, textinput.Blink
+			}
+		case "n":
+			// Next match
+			if m.state == StateReviewing && m.search.Query != "" {
+				m.search.NextMatch()
+				m.updateViewportWithSearch()
+				m.scrollToCurrentMatch()
+			}
+			m.lastKeyWasY = false
+		case "N":
+			// Previous match
+			if m.state == StateReviewing && m.search.Query != "" {
+				m.search.PrevMatch()
+				m.updateViewportWithSearch()
+				m.scrollToCurrentMatch()
+			}
+			m.lastKeyWasY = false
+
+		// Yank commands
+		case "y":
+			if m.state == StateReviewing && !m.lastKeyWasY {
+				// First 'y' press - wait to see if followed by 'b'
+				m.lastKeyWasY = true
+				return m, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
+					return yankTimeoutMsg{}
+				})
+			} else if m.lastKeyWasY {
+				// Second 'y' press (yy) - yank entire review
+				m.lastKeyWasY = false
+				return m, m.yankReview()
+			}
+		case "b":
+			if m.state == StateReviewing && m.lastKeyWasY {
+				// 'yb' combo - yank code block
+				m.lastKeyWasY = false
+				return m, m.yankCodeBlock()
+			}
+			m.lastKeyWasY = false
+
+		// Vim-style navigation (only in reviewing state, not chatting)
+		case "j", "down":
+			if m.state == StateReviewing {
+				m.viewport.LineDown(1)
+			}
+		case "k", "up":
+			if m.state == StateReviewing {
+				m.viewport.LineUp(1)
+			}
+		case "g", "home":
+			if m.state == StateReviewing {
+				m.viewport.GotoTop()
+			}
+		case "G", "end":
+			if m.state == StateReviewing {
+				m.viewport.GotoBottom()
+			}
+		case "ctrl+d":
+			if m.state == StateReviewing {
+				m.viewport.HalfViewDown()
+			}
+		case "ctrl+u":
+			if m.state == StateReviewing {
+				m.viewport.HalfViewUp()
+			}
+		case "ctrl+f", "pgdown":
+			if m.state == StateReviewing {
+				m.viewport.ViewDown()
+			}
+		case "ctrl+b", "pgup":
+			if m.state == StateReviewing {
+				m.viewport.ViewUp()
 			}
 		}
 
@@ -208,6 +369,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.errorMsg = msg.Err.Error()
 		m.chatHistory = append(m.chatHistory, ChatMessage{Role: "assistant", Content: "Error: " + msg.Err.Error()})
 		m.updateViewport()
+
+	case yankTimeoutMsg:
+		// Timeout for yank combo - if lastKeyWasY is still true, yank entire review
+		if m.lastKeyWasY {
+			m.lastKeyWasY = false
+			return m, m.yankReview()
+		}
+
+	case YankMsg:
+		m.yankFeedback = fmt.Sprintf("✓ Copied %s to clipboard!", msg.Type)
+		return m, ClearYankFeedbackCmd(2 * time.Second)
+
+	case YankFeedbackMsg:
+		m.yankFeedback = ""
 	}
 
 	// Update textarea in chat mode
@@ -278,14 +453,112 @@ func (m *Model) updateViewport() {
 		}
 	}
 
-	m.viewport.SetContent(content.String())
+	m.rawContent = content.String()
+	m.viewport.SetContent(m.rawContent)
 	m.viewport.GotoBottom()
+}
+
+// updateViewportWithSearch updates the viewport with search highlighting
+func (m *Model) updateViewportWithSearch() {
+	if m.rawContent == "" {
+		return
+	}
+
+	if m.search.Query == "" || len(m.search.Matches) == 0 {
+		m.viewport.SetContent(m.rawContent)
+		return
+	}
+
+	var displayContent string
+	if m.search.Mode == SearchModeFilter {
+		displayContent = m.search.FilterContent(m.rawContent)
+	} else {
+		displayContent = m.search.HighlightContent(m.rawContent)
+	}
+
+	m.viewport.SetContent(displayContent)
+}
+
+// scrollToCurrentMatch scrolls the viewport to show the current match
+func (m *Model) scrollToCurrentMatch() {
+	line := m.search.CurrentMatchLine()
+	if line < 0 {
+		return
+	}
+
+	// Calculate approximate line position and scroll there
+	// This is an approximation since rendered content may have different line counts
+	viewportHeight := m.viewport.Height
+	targetLine := line - viewportHeight/2
+	if targetLine < 0 {
+		targetLine = 0
+	}
+
+	m.viewport.GotoTop()
+	m.viewport.LineDown(targetLine)
+}
+
+// yankReview yanks the entire review content to clipboard
+func (m *Model) yankReview() tea.Cmd {
+	return func() tea.Msg {
+		content := m.reviewResponse
+		if content == "" {
+			return nil
+		}
+
+		err := clipboard.WriteAll(content)
+		if err != nil {
+			return ChatErrorMsg{Err: fmt.Errorf("failed to copy to clipboard: %w", err)}
+		}
+
+		return YankMsg{Content: content, Type: "review"}
+	}
+}
+
+// yankCodeBlock yanks the code block nearest to the current viewport position
+func (m *Model) yankCodeBlock() tea.Cmd {
+	return func() tea.Msg {
+		content := m.reviewResponse
+		if content == "" {
+			return nil
+		}
+
+		// Find all code blocks (fenced with ```)
+		codeBlockRegex := regexp.MustCompile("(?s)```[a-zA-Z]*\n(.*?)```")
+		matches := codeBlockRegex.FindAllStringSubmatch(content, -1)
+
+		if len(matches) == 0 {
+			return YankMsg{Content: "", Type: "no code blocks found"}
+		}
+
+		// Get the first code block (or could be enhanced to find nearest to cursor)
+		// For now, we'll get the last code block as it's likely the most relevant suggestion
+		lastMatch := matches[len(matches)-1]
+		codeContent := strings.TrimSpace(lastMatch[1])
+
+		if codeContent == "" {
+			return YankMsg{Content: "", Type: "empty code block"}
+		}
+
+		err := clipboard.WriteAll(codeContent)
+		if err != nil {
+			return ChatErrorMsg{Err: fmt.Errorf("failed to copy to clipboard: %w", err)}
+		}
+
+		return YankMsg{Content: codeContent, Type: "code block"}
+	}
 }
 
 // View renders the UI
 func (m Model) View() string {
 	if !m.ready {
 		return "\n  Initializing..."
+	}
+
+	// If help overlay is active, render it
+	if m.state == StateHelp {
+		helpOverlay := NewHelpOverlay(m.width, m.height)
+		return helpOverlay.Render()
 	}
 
 	var s strings.Builder
@@ -300,7 +573,7 @@ func (m Model) View() string {
 		s.WriteString(" Analyzing your code changes...\n\n")
 		s.WriteString(RenderSubtitle(m.reviewCtx.Summary()))
 
-	case StateReviewing, StateChatting:
+	case StateReviewing, StateChatting, StateSearching:
 		s.WriteString(m.viewport.View())
 		s.WriteString("\n")
 
@@ -313,16 +586,41 @@ func (m Model) View() string {
 			}
 		}
 
+		if m.state == StateSearching {
+			s.WriteString(RenderSearchInput(
+				m.searchInput.Value(),
+				m.search.MatchCount(),
+				m.search.CurrentMatch,
+				m.search.Mode,
+			))
+			s.WriteString("\n")
+		}
+
 	case StateError:
 		s.WriteString(RenderError(m.errorMsg))
 	}
 
+	// Yank feedback
+	if m.yankFeedback != "" {
+		s.WriteString("\n")
+		s.WriteString(RenderSuccess(m.yankFeedback))
+	}
+
 	// Footer
 	s.WriteString("\n")
-	if m.state == StateReviewing {
-		s.WriteString(RenderHelp("enter: ask follow-up • q: quit"))
+	if m.state == StateSearching {
+		s.WriteString(RenderHelp("enter: confirm • tab: toggle mode • esc: cancel"))
+	} else if m.state == StateReviewing {
+		var helpText string
+		if m.search.Query != "" && m.search.MatchCount() > 0 {
+			helpText = fmt.Sprintf("n/N: next/prev (%d/%d) • /: search • ?: help • q: quit",
+				m.search.CurrentMatch+1, m.search.MatchCount())
+		} else {
+			helpText = "j/k: scroll • y: yank • /: search • ?: help • q: quit"
+		}
+		s.WriteString(RenderHelp(helpText))
 	} else if m.state == StateChatting {
-		s.WriteString(RenderHelp("enter: send • esc: back • q: quit"))
+		s.WriteString(RenderHelp("enter: send • esc: back • ?: help • q: quit"))
 	} else {
 		s.WriteString(RenderHelp("q: quit"))
 	}
@@ -331,11 +629,11 @@ func (m Model) View() string {
 }
 
 // Run starts the Bubbletea program
-func Run(reviewCtx *appcontext.ReviewContext, client *gemini.Client) error {
-	model := NewModel(reviewCtx, client)
-	p := tea.NewProgram(model, tea.WithAltScreen())
+func Run(reviewCtx *appcontext.ReviewContext, client *gemini.Client, p *preset.Preset) error {
+	model := NewModel(reviewCtx, client, p)
+	program := tea.NewProgram(model, tea.WithAltScreen())
 
-	if _, err := p.Run(); err != nil {
+	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("error running UI: %w", err)
 	}
 
@@ -343,9 +641,13 @@ func Run(reviewCtx *appcontext.ReviewContext, client *gemini.Client) error {
 }
 
 // RunSimple runs a simple non-interactive review
-func RunSimple(ctx context.Context, reviewCtx *appcontext.ReviewContext, client *gemini.Client) error {
-	// Initialize chat
-	client.StartChat(appcontext.GetSystemPrompt())
+func RunSimple(ctx context.Context, reviewCtx *appcontext.ReviewContext, client *gemini.Client, p *preset.Preset) error {
+	// Initialize chat with system prompt (with preset if specified)
+	systemPrompt := appcontext.GetSystemPrompt()
+	if p != nil {
+		systemPrompt = appcontext.GetSystemPromptWithPreset(p.Prompt)
+	}
+	client.StartChat(systemPrompt)
 
 	fmt.Println(RenderTitle("🔍 Code Review"))
 	fmt.Println(RenderSubtitle(reviewCtx.Summary()))

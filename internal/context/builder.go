@@ -100,6 +100,11 @@ func GetSystemPrompt() string {
 	return prompt.SystemPrompt
 }
 
+// GetSystemPromptWithPreset returns the system prompt modified by a preset
+func GetSystemPromptWithPreset(presetPrompt string) string {
+	return prompt.SystemPrompt + "\n\n---\n\n" + presetPrompt
+}
+
 // Summary returns a summary of what will be reviewed
 func (rc *ReviewContext) Summary() string {
 	fileCount := len(rc.FileContents)

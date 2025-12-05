@@ -7,6 +7,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version information (set at build time)
+var (
+	version = "0.3.0"
+	commit  = "dev"
+	date    = "unknown"
+)
+
 var (
 	// Config holds global configuration
 	apiKey string
@@ -14,8 +21,9 @@ var (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "revcli",
-	Short: "Gemini-powered code reviewer CLI",
+	Use:     "revcli",
+	Short:   "Gemini-powered code reviewer CLI",
+	Version: version,
 	Long: `revcli is a local command-line tool that acts as an intelligent peer reviewer.
 It reads your local git changes and uses Google's Gemini LLM to analyze your code
 for bugs, optimization opportunities, and best practices.`,
@@ -30,7 +38,10 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Global flags
-	rootCmd.PersistentFlags().StringVar(&apiKey, "api-key", "", "Gemini API key (overrides GEMINI_API_KEY env var)")
+	rootCmd.PersistentFlags().StringVarP(&apiKey, "api-key", "k", "", "Gemini API key (overrides GEMINI_API_KEY env var)")
+
+	// Custom version template
+	rootCmd.SetVersionTemplate(fmt.Sprintf("revcli version %s (commit: %s, built: %s)\n", version, commit, date))
 }
 
 // initConfig reads in config from environment variables
