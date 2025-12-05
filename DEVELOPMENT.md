@@ -70,12 +70,12 @@
 
 # v0.3 - Short Flags & Vim UX
 
-**Status:** Planned
+**Status:** In Progress
 
-**Features:**
+**Features Implemented:**
 
-### Short Flag Aliases
-- [ ] Add short aliases for all flags:
+### Short Flag Aliases ✅
+- [x] Add short aliases for all flags:
   | Long | Short | Description |
   |------|-------|-------------|
   | `--staged` | `-s` | Review staged changes |
@@ -85,22 +85,31 @@
   | `--interactive` | `-i` | Interactive mode |
   | `--no-interactive` | `-I` | Non-interactive mode |
   | `--api-key` | `-k` | API key |
-- Add version flag
+  | `--preset` | `-p` | Review preset |
+- [x] Add version flag (`--version`, `-v`)
 
-### Vim-Style Keybindings
-- [ ] Navigation: `j/k` (down/up), `g/G` (top/bottom), `Ctrl+d/u` (half-page)
-- [ ] Search: `/` to search, `n/N` for next/prev match
-- [ ] Help: `?` to show keybindings overlay
+### Vim-Style Keybindings ✅
+- [x] Navigation: `j/k` (down/up), `g/G` (top/bottom), `Ctrl+d/u` (half-page), `Ctrl+f/b` (full page)
+- [x] Search: `/` to search, `n/N` for next/prev match, `Tab` to toggle highlight/filter mode
+- [x] Help: `?` to show keybindings overlay
 
-### Yank to Clipboard
-- [ ] `y` - Yank entire review to clipboard
-- [ ] `yb` - Yank code block under cursor
-- [ ] Visual feedback when yanked
+### Yank to Clipboard ✅
+- [x] `y` - Yank entire review to clipboard
+- [x] `yb` - Yank code block (currently yanks last code block)
+- [x] Visual feedback when yanked (2-second toast notification)
 
-### Review Presets
-- [ ] `--preset <name>` - Use predefined review style
-- [ ] Built-in presets: `strict`, `security`, `performance`, `quick`, `logic`, `style`, `typo`, `naming`,...
-- [ ] Custom presets in `~/.config/revcli/presets/`
+### Review Presets ✅
+- [x] `--preset <name>` / `-p` - Use predefined review style
+- [x] Built-in presets: `quick`, `strict`, `security`, `performance`, `logic`, `style`, `typo`, `naming`
+- [x] Custom presets in `~/.config/revcli/presets/*.yaml`
+
+**Remaining Features:**
+
+### Code Block Highlighting
+- [ ] Detect code block under cursor based on viewport position
+- [ ] Highlight active code block with distinct border
+- [ ] Show contextual hint "Press yb to copy" when code block is focused
+- [ ] `yb` yanks the highlighted block (not just last block)
 
 ---
 
@@ -109,6 +118,11 @@
 **Status:** Planned
 
 **Features:**
+
+### Code Block Navigation
+- [ ] `[` / `]` - Navigate to previous/next code block
+- [ ] Code block index indicator (e.g., "Block 2/5")
+- [ ] Jump to specific block with number prefix (e.g., `2]` jumps to block 2)
 
 ### Panes Management Mode
 - [ ] Multi-pane layout inspired by lazy-git/lazy-docker
@@ -123,7 +137,7 @@
 - [ ] `a` - Accept/apply suggestion
 - [ ] `x` - Reject/ignore suggestion
 - [ ] Add to ignore list (global/conversation)
-- [ ] Navigate through reviews with `[` and `]`
+- [ ] Navigate through suggestions with `[` and `]`
 
 ### Export & Save
 - [ ] `e` - Export current review to file
@@ -143,6 +157,14 @@
 **Status:** Future
 
 **Features:**
+
+### Code Block Folding
+- [ ] `zc` - Fold/collapse current code block
+- [ ] `zo` - Unfold/expand current code block
+- [ ] `za` - Toggle fold state
+- [ ] `zM` - Fold all code blocks
+- [ ] `zR` - Unfold all code blocks
+- [ ] Collapsed indicator showing language and line count
 
 ### Token Rotation
 - [ ] Support multiple API keys
