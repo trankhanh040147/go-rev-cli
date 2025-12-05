@@ -12,9 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	appcontext "github.com/trankhanh040147/rev-cli/internal/context"
-	"github.com/trankhanh040147/rev-cli/internal/gemini"
-	"github.com/trankhanh040147/rev-cli/internal/prompt"
+	appcontext "github.com/trankhanh040147/revcli/internal/context"
+	"github.com/trankhanh040147/revcli/internal/gemini"
+	"github.com/trankhanh040147/revcli/internal/prompt"
 )
 
 // State represents the current state of the application

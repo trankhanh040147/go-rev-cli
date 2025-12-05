@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/trankhanh040147/rev-cli/internal/filter"
-	"github.com/trankhanh040147/rev-cli/internal/git"
-	"github.com/trankhanh040147/rev-cli/internal/prompt"
+	"github.com/trankhanh040147/revcli/internal/filter"
+	"github.com/trankhanh040147/revcli/internal/git"
+	"github.com/trankhanh040147/revcli/internal/prompt"
 )
 
 // ReviewContext contains all the data needed for a code review

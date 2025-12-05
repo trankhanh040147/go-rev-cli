@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/trankhanh040147/rev-cli/cmd"
+	"github.com/trankhanh040147/revcli/cmd"
 )
 
 func main() {

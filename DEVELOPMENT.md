@@ -48,9 +48,6 @@
 **Status:** Completed
 
 **Features Implemented:**
-- [x] **Project rename:** `go-rev-cli` → `rev-cli`
-  - Module path: `github.com/trankhanh040147/rev-cli`
-  - Binary name: `rev-cli`
 - [x] **Custom base branch/commit comparison**
   - `--base <branch>` - Compare against a branch (e.g., `main`, `develop`)
   - `--base <commit>` - Compare against a specific commit hash
@@ -67,8 +64,6 @@
   - Total tokens
 
 **Breaking Changes:**
-- Binary renamed: `go-rev-cli` → `rev-cli`
-- Module path changed: `github.com/trankhanh040147/go-rev-cli` → `github.com/trankhanh040147/rev-cli`
 - Default model changed: `gemini-1.5-flash` → `gemini-2.5-pro`
 
 ---
@@ -104,7 +99,7 @@
 ### Review Presets
 - [ ] `--preset <name>` - Use predefined review style
 - [ ] Built-in presets: `strict`, `security`, `performance`, `quick`
-- [ ] Custom presets in `~/.config/rev-cli/presets/`
+- [ ] Custom presets in `~/.config/revcli/presets/`
 
 ---
 
@@ -132,11 +127,11 @@
 ### Export & Save
 - [ ] `e` - Export current review to file
 - [ ] `E` - Export entire conversation
-- [ ] Auto-save conversations to `~/.local/share/rev-cli/`
+- [ ] Auto-save conversations to `~/.local/share/revcli/`
 - [ ] `--format json|markdown` output formats
 
 ### Config Management
-- [ ] `~/.config/rev-cli/config.yaml` support
+- [ ] `~/.config/revcli/config.yaml` support
 - [ ] Settings: default model, base branch, ignore patterns
 - [ ] In-app config editing via config pane
 
@@ -179,13 +174,13 @@
 - [ ] `--provider` flag
 
 ### Build Mode
-- [ ] `rev-cli build docs` - Generate documentation
-- [ ] `rev-cli build postman` - Generate Postman collections
+- [ ] `revcli build docs` - Generate documentation
+- [ ] `revcli build postman` - Generate Postman collections
 - [ ] Interactive file/folder selection with Vim navigation
 - [ ] Read from controller, serializers, routers
 
 ### Team Features
-- [ ] Shared config via `.rev-cli.yaml` in repo
+- [ ] Shared config via `.revcli.yaml` in repo
 - [ ] Team-specific prompts and rules
 - [ ] Pre-commit hook integration
 
@@ -203,7 +198,7 @@
 **Features:**
 
 ### Interview Mode
-- [ ] `rev-cli interview` - Practice coding interviews
+- [ ] `revcli interview` - Practice coding interviews
 - [ ] Algorithm questions with hints
 - [ ] Code review practice
 
@@ -224,8 +219,8 @@
 
 > Raw ideas for future consideration
 
-- Compare two branches directly (`rev-cli diff main feature-branch`)
-- Review specific files only (`rev-cli review src/api.go`)
+- Compare two branches directly (`revcli diff main feature-branch`)
+- Review specific files only (`revcli review src/api.go`)
 - Ignore patterns via `.revignore` file
 - Statistics dashboard (reviews done, issues found)
 - Multi-language support (i18n for prompts)

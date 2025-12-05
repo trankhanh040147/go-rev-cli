@@ -1,5 +1,5 @@
 # Go parameters
-BINARY_NAME=rev-cli
+BINARY_NAME=revcli
 MAIN_PACKAGE=.
 GO=go
 

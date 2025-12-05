@@ -1,11 +1,11 @@
-# rev-cli
+# revcli
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/trankhanh040147/rev-cli)](https://goreportcard.com/report/github.com/trankhanh040147/rev-cli)
+[![Go Report Card](https://goreportcard.com/badge/github.com/trankhanh040147/revcli)](https://goreportcard.com/report/github.com/trankhanh040147/revcli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > **Gemini-powered code reviewer CLI.**
 
-**rev-cli** is a local command-line tool that acts as an intelligent peer reviewer. It reads your local git changes and uses Google's Gemini LLM to analyze your code for bugs, optimization opportunities, and best practices—all before you push a single commit.
+**revcli** is a local command-line tool that acts as an intelligent peer reviewer. It reads your local git changes and uses Google's Gemini LLM to analyze your code for bugs, optimization opportunities, and best practices—all before you push a single commit.
 
 ## Features
 
@@ -30,27 +30,19 @@ Before using the tool, ensure you have the following installed:
 You can install the tool directly using `go install`:
 
 ```bash
-go install github.com/trankhanh040147/rev-cli@latest
+go install github.com/trankhanh040147/revcli@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/trankhanh040147/rev-cli.git
-cd rev-cli
+git clone https://github.com/trankhanh040147/revcli.git
+cd revcli
 make build
 ```
 
-### Upgrading from go-rev-cli
-
-If you previously installed `go-rev-cli`:
-
-```bash
-# Remove old version
-rm $(which go-rev-cli)
-
 # Install new version
-go install github.com/trankhanh040147/rev-cli@latest
+go install github.com/trankhanh040147/revcli@latest
 ```
 
 ## Configuration
@@ -70,7 +62,7 @@ Or pass it directly via the `--api-key` flag.
 Review all uncommitted changes in your repository:
 
 ```bash
-rev-cli review
+revcli review
 ```
 
 ### Review Against a Branch (MR/PR Style)
@@ -79,13 +71,13 @@ Compare your current changes against a base branch - perfect for merge request r
 
 ```bash
 # Compare against main branch
-rev-cli review --base main
+revcli review --base main
 
 # Compare against develop branch
-rev-cli review --base develop
+revcli review --base develop
 
 # Compare against a specific commit
-rev-cli review --base abc1234
+revcli review --base abc1234
 ```
 
 ### Review Staged Changes Only
@@ -93,7 +85,7 @@ rev-cli review --base abc1234
 Review only the changes you've staged for commit:
 
 ```bash
-rev-cli review --staged
+revcli review --staged
 ```
 
 ### Use a Specific Model
@@ -101,7 +93,7 @@ rev-cli review --staged
 The default model is `gemini-2.5-pro`. You can also use other models:
 
 ```bash
-rev-cli review --model gemini-1.5-flash
+revcli review --model gemini-1.5-flash
 ```
 
 ### Non-Interactive Mode
@@ -109,7 +101,7 @@ rev-cli review --model gemini-1.5-flash
 Get the review output without the interactive chat interface:
 
 ```bash
-rev-cli review --no-interactive
+revcli review --no-interactive
 ```
 
 ### Skip Secret Detection
@@ -117,7 +109,7 @@ rev-cli review --no-interactive
 If you're confident there are no secrets in your code (use with caution):
 
 ```bash
-rev-cli review --force
+revcli review --force
 ```
 
 ## Interactive Mode
@@ -131,7 +123,7 @@ When running in interactive mode (default), you can:
 
 ## Context Preview
 
-Before sending to the API, rev-cli shows you exactly what will be reviewed:
+Before sending to the API, revcli shows you exactly what will be reviewed:
 
 ```
 📋 Review Context

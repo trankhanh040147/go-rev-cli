@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	appcontext "github.com/trankhanh040147/rev-cli/internal/context"
-	"github.com/trankhanh040147/rev-cli/internal/filter"
-	"github.com/trankhanh040147/rev-cli/internal/gemini"
-	"github.com/trankhanh040147/rev-cli/internal/ui"
+	appcontext "github.com/trankhanh040147/revcli/internal/context"
+	"github.com/trankhanh040147/revcli/internal/filter"
+	"github.com/trankhanh040147/revcli/internal/gemini"
+	"github.com/trankhanh040147/revcli/internal/ui"
 )
 
 var (
@@ -31,19 +31,19 @@ and ensure idiomatic Go practices.
 
 Examples:
   # Review staged changes with interactive chat
-  rev-cli review --staged
+  revcli review --staged
 
   # Review changes against main branch
-  rev-cli review --base main
+  revcli review --base main
 
   # Review all uncommitted changes with a specific model
-  rev-cli review --model gemini-2.5-pro
+  revcli review --model gemini-2.5-pro
 
   # Non-interactive mode (just print the review)
-  rev-cli review --no-interactive
+  revcli review --no-interactive
 
   # Skip secret detection check
-  rev-cli review --force`,
+  revcli review --force`,
 	RunE: runReview,
 }
 
