@@ -194,3 +194,10 @@ func HelpFooter() string {
 	return helpStyle.Render("q: quit • enter: send message • esc: exit chat mode")
 }
 
+// RenderTokenUsage renders token usage information
+func RenderTokenUsage(prompt, completion, total int32) string {
+	return subtitleStyle.Render(fmt.Sprintf(
+		"📊 Token Usage: %d prompt + %d completion = %d total",
+		prompt, completion, total,
+	))
+}

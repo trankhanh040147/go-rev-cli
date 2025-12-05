@@ -1,4 +1,4 @@
-module github.com/trankhanh040147/go-rev-cli
+module github.com/trankhanh040147/revcli
 
 go 1.25.4
 

@@ -1,10 +1,10 @@
 # Go parameters
-BINARY_NAME=go-rev-cli
+BINARY_NAME=revcli
 MAIN_PACKAGE=.
 GO=go
 
 # Build info
-VERSION?=0.1.0
+VERSION?=0.2.0
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 

@@ -1,5 +1,5 @@
 # Binaries
-go-rev-cli
+revcli
 *.exe
 *.exe~
 *.dll

@@ -14,11 +14,11 @@ var (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "go-rev-cli",
-	Short: "Gemini-powered code reviewer CLI for Go developers",
-	Long: `go-rev-cli is a local command-line tool that acts as an intelligent peer reviewer.
+	Use:   "revcli",
+	Short: "Gemini-powered code reviewer CLI",
+	Long: `revcli is a local command-line tool that acts as an intelligent peer reviewer.
 It reads your local git changes and uses Google's Gemini LLM to analyze your code
-for bugs, optimization opportunities, and idiomatic Go practices.`,
+for bugs, optimization opportunities, and best practices.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -48,4 +48,3 @@ func initConfig() {
 func GetAPIKey() string {
 	return apiKey
 }
-
