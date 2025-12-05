@@ -106,6 +106,7 @@
 **Remaining Features:**
 
 ### Code Block Highlighting
+- [ ] Show cursor while navigating 
 - [ ] Detect code block under cursor based on viewport position
 - [ ] Highlight active code block with distinct border
 - [ ] Show contextual hint "Press yb to copy" when code block is focused
