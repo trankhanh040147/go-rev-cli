@@ -1,9 +1,13 @@
 package gemini
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/iterator"
@@ -242,4 +246,156 @@ func (u *TokenUsage) FormatUsage() string {
 	}
 	return fmt.Sprintf("Tokens: %d prompt + %d completion = %d total",
 		u.PromptTokens, u.CompletionTokens, u.TotalTokens)
+}
+
+// CostBreakdown contains detailed cost information
+type CostBreakdown struct {
+	InputCost  float64 // Cost for input tokens (USD)
+	OutputCost float64 // Cost for output (text or image) (USD)
+	TotalCost  float64 // Total cost (USD)
+	InputCostVND  float64 // Cost for input tokens (VND)
+	OutputCostVND float64 // Cost for output (text or image) (VND)
+	TotalCostVND  float64 // Total cost (VND)
+}
+
+// ImageGenerationResult contains the result of an image generation request
+type ImageGenerationResult struct {
+	ImageData []byte
+	Text      string
+	Usage     *TokenUsage
+	Cost      *CostBreakdown
+}
+
+// imageGenerationRequest represents the API request structure for image generation
+type imageGenerationRequest struct {
+	Contents []struct {
+		Parts []struct {
+			Text string `json:"text"`
+		} `json:"parts"`
+	} `json:"contents"`
+	GenerationConfig struct {
+		ResponseModalities []string `json:"responseModalities"`
+		ImageConfig        struct {
+			AspectRatio string `json:"aspectRatio"`
+			ImageSize   string `json:"imageSize"`
+		} `json:"imageConfig"`
+	} `json:"generationConfig"`
+}
+
+// imageGenerationResponse represents the API response structure for image generation
+type imageGenerationResponse struct {
+	Candidates []struct {
+		Content struct {
+			Parts []struct {
+				Text       *string `json:"text"`
+				InlineData *struct {
+					MimeType string `json:"mimeType"`
+					Data     string `json:"data"`
+				} `json:"inlineData"`
+			} `json:"parts"`
+		} `json:"content"`
+	} `json:"candidates"`
+	UsageMetadata *struct {
+		PromptTokenCount     int32 `json:"promptTokenCount"`
+		CandidatesTokenCount int32 `json:"candidatesTokenCount"`
+		TotalTokenCount      int32 `json:"totalTokenCount"`
+	} `json:"usageMetadata"`
+}
+
+// GenerateImage generates an image using the gemini-3-pro-image-preview model via REST API
+func (c *Client) GenerateImage(ctx context.Context, apiKey, prompt, aspectRatio, resolution string) (*ImageGenerationResult, error) {
+	// Construct the API request
+	reqBody := imageGenerationRequest{
+		Contents: []struct {
+			Parts []struct {
+				Text string `json:"text"`
+			} `json:"parts"`
+		}{
+			{
+				Parts: []struct {
+					Text string `json:"text"`
+				}{
+					{Text: prompt},
+				},
+			},
+		},
+	}
+	reqBody.GenerationConfig.ResponseModalities = []string{"TEXT", "IMAGE"}
+	reqBody.GenerationConfig.ImageConfig.AspectRatio = aspectRatio
+	reqBody.GenerationConfig.ImageConfig.ImageSize = resolution
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Make HTTP request to Gemini API
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", c.modelID, apiKey)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	// Parse response
+	var apiResp imageGenerationResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Extract token usage
+	result := &ImageGenerationResult{}
+	if apiResp.UsageMetadata != nil {
+		result.Usage = &TokenUsage{
+			PromptTokens:     apiResp.UsageMetadata.PromptTokenCount,
+			CompletionTokens: apiResp.UsageMetadata.CandidatesTokenCount,
+			TotalTokens:      apiResp.UsageMetadata.TotalTokenCount,
+		}
+		c.lastUsage = result.Usage
+	}
+
+	// Extract image data and text from response
+	if len(apiResp.Candidates) == 0 {
+		return nil, fmt.Errorf("no candidates in response")
+	}
+
+	imageFound := false
+	for _, candidate := range apiResp.Candidates {
+		for _, part := range candidate.Content.Parts {
+			// Extract text
+			if part.Text != nil {
+				result.Text += *part.Text
+			}
+			// Extract image data - take the first valid image found
+			// Note: Gemini API typically returns one image per request, but we handle
+			// multiple by taking the first valid one to avoid overwriting
+			if !imageFound && part.InlineData != nil {
+				// Decode base64 image data
+				decoded, err := base64.StdEncoding.DecodeString(part.InlineData.Data)
+				if err == nil && len(decoded) > 0 {
+					result.ImageData = decoded
+					imageFound = true
+				}
+			}
+		}
+	}
+
+	if !imageFound || len(result.ImageData) == 0 {
+		return nil, fmt.Errorf("no image data found in response")
+	}
+
+	return result, nil
 }
