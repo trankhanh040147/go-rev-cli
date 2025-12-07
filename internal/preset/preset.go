@@ -189,10 +189,113 @@ func Get(name string) (*Preset, error) {
 	// Check custom presets
 	preset, err := loadCustomPreset(name)
 	if err != nil {
-		return nil, fmt.Errorf("preset '%s' not found. Available: %s", name, ListNames())
+		// Try to find similar presets
+		similar := FindSimilarPresets(name, 2)
+
+		var suggestion string
+		if len(similar) > 0 {
+			if len(similar) == 1 {
+				suggestion = fmt.Sprintf(". Did you mean '%s'?", similar[0])
+			} else {
+				suggestion = fmt.Sprintf(". Did you mean one of: %s?", strings.Join(similar, ", "))
+			}
+		}
+
+		return nil, fmt.Errorf("preset '%s' not found%s. Available: %s", name, suggestion, ListNames())
 	}
 
 	return preset, nil
+}
+
+// FindSimilarPresets finds preset names similar to the given name using Levenshtein distance
+// threshold: maximum edit distance to consider a preset as similar (lower = more strict)
+func FindSimilarPresets(name string, threshold int) []string {
+	allNames := GetAllPresetNames()
+	similar := make([]string, 0)
+
+	name = strings.ToLower(name)
+	nameLen := len(name)
+
+	for _, presetName := range allNames {
+		presetNameLower := strings.ToLower(presetName)
+
+		// Skip exact matches
+		if presetNameLower == name {
+			continue
+		}
+
+		// For very short inputs (1-2 chars), use prefix matching
+		if nameLen <= 2 {
+			if strings.HasPrefix(presetNameLower, name) {
+				similar = append(similar, presetName)
+				continue
+			}
+		}
+
+		// Calculate Levenshtein distance
+		distance := levenshteinDistance(name, presetNameLower)
+
+		// For short inputs (3-4 chars), use relative similarity (percentage-based)
+		// For longer inputs, use absolute threshold
+		var isSimilar bool
+		if nameLen <= 4 {
+			// Use relative similarity: distance should be <= 50% of input length
+			maxDistance := (nameLen + 1) / 2 // Allow up to 50% of input length as distance
+			isSimilar = distance <= maxDistance
+		} else {
+			// Use absolute threshold for longer inputs
+			isSimilar = distance <= threshold
+		}
+
+		// Also check if the input is a substring of the preset name (for partial matches)
+		isSubstring := strings.HasPrefix(presetNameLower, name) || strings.Contains(presetNameLower, name)
+
+		if isSimilar || (isSubstring && nameLen >= 3) {
+			similar = append(similar, presetName)
+		}
+	}
+
+	return similar
+}
+
+// levenshteinDistance calculates the edit distance between two strings
+func levenshteinDistance(s1, s2 string) int {
+	r1, r2 := []rune(s1), []rune(s2)
+	column := make([]int, len(r1)+1)
+
+	for y := 1; y <= len(r1); y++ {
+		column[y] = y
+	}
+
+	for x := 1; x <= len(r2); x++ {
+		column[0] = x
+		lastDiag := x - 1
+		for y := 1; y <= len(r1); y++ {
+			oldDiag := column[y]
+			cost := 0
+			if r1[y-1] != r2[x-1] {
+				cost = 1
+			}
+			column[y] = min(column[y]+1, column[y-1]+1, lastDiag+cost)
+			lastDiag = oldDiag
+		}
+	}
+
+	return column[len(r1)]
+}
+
+// min returns the minimum of three integers
+func min(a, b, c int) int {
+	if a < b {
+		if a < c {
+			return a
+		}
+		return c
+	}
+	if b < c {
+		return b
+	}
+	return c
 }
 
 // loadCustomPreset attempts to load a preset from ~/.config/revcli/presets/
@@ -221,13 +324,58 @@ func loadCustomPreset(name string) (*Preset, error) {
 	return &preset, nil
 }
 
-// ListNames returns a comma-separated list of available preset names
+// ListNames returns a comma-separated list of available preset names (built-in + custom)
 func ListNames() string {
+	names := GetAllPresetNames()
+	return strings.Join(names, ", ")
+}
+
+// GetAllPresetNames returns a list of all preset names (built-in + custom)
+func GetAllPresetNames() []string {
 	names := make([]string, 0, len(BuiltInPresets))
+
+	// Add built-in preset names
 	for name := range BuiltInPresets {
 		names = append(names, name)
 	}
-	return strings.Join(names, ", ")
+
+	// Add custom preset names
+	customPresets, err := listCustomPresetNames()
+	if err == nil {
+		names = append(names, customPresets...)
+	}
+
+	return names
+}
+
+// listCustomPresetNames returns a list of custom preset names
+func listCustomPresetNames() ([]string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+
+	presetDir := filepath.Join(homeDir, ".config", "revcli", "presets")
+
+	// Check if directory exists
+	if _, err := os.Stat(presetDir); os.IsNotExist(err) {
+		return []string{}, nil
+	}
+
+	files, err := os.ReadDir(presetDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var presets []string
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".yaml") {
+			name := strings.TrimSuffix(file.Name(), ".yaml")
+			presets = append(presets, name)
+		}
+	}
+
+	return presets, nil
 }
 
 // List returns all built-in presets
