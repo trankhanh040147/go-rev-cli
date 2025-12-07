@@ -267,31 +267,31 @@ Imagen 4 is Google's latest text-to-image model, offering multiple speed and qua
 
 ### Side-by-Side API Pricing Comparison
 
-| Provider | Model | Quality/Speed | Resolution | Price per Image |
-|----------|-------|---------------|------------|-----------------|
-| **OpenAI** | GPT Image 1 | Low | 1024x1024 | $0.011 |
-| | | | 1024x1536 | $0.016 |
-| | | | 1536x1024 | $0.016 |
-| | | Medium | 1024x1024 | $0.042 |
-| | | | 1024x1536 | $0.063 |
-| | | | 1536x1024 | $0.063 |
-| | | High | 1024x1024 | $0.167 |
-| | | | 1024x1536 | $0.25 |
-| | | | 1536x1024 | $0.25 |
-| | GPT Image 1 Mini | Low | 1024x1024 | $0.005 |
-| | | | 1024x1536 | $0.006 |
-| | | | 1536x1024 | $0.006 |
-| | | Medium | 1024x1024 | $0.011 |
-| | | | 1024x1536 | $0.015 |
-| | | | 1536x1024 | $0.015 |
-| | | High | 1024x1024 | $0.036 |
-| | | | 1024x1536 | $0.052 |
-| | | | 1536x1024 | $0.052 |
-| **Google** | Imagen 4 | Fast | Default | $0.02 |
-| | | Standard | Default | $0.04 |
-| | | Ultra | Default | $0.06 |
-| | | Standard | Upscaling | $0.06 |
-| | Gemini 3 Pro Image Preview | Preview | Varies | Contact for pricing |
+| Provider   | Model                      | Quality/Speed | Resolution | Price per Image     |
+| ---------- | -------------------------- | ------------- | ---------- | ------------------- |
+| **OpenAI** | GPT Image 1                | Low           | 1024x1024  | $0.011              |
+|            |                            |               | 1024x1536  | $0.016              |
+|            |                            |               | 1536x1024  | $0.016              |
+|            |                            | Medium        | 1024x1024  | $0.042              |
+|            |                            |               | 1024x1536  | $0.063              |
+|            |                            |               | 1536x1024  | $0.063              |
+|            |                            | High          | 1024x1024  | $0.167              |
+|            |                            |               | 1024x1536  | $0.25               |
+|            |                            |               | 1536x1024  | $0.25               |
+|            | GPT Image 1 Mini           | Low           | 1024x1024  | $0.005              |
+|            |                            |               | 1024x1536  | $0.006              |
+|            |                            |               | 1536x1024  | $0.006              |
+|            |                            | Medium        | 1024x1024  | $0.011              |
+|            |                            |               | 1024x1536  | $0.015              |
+|            |                            |               | 1536x1024  | $0.015              |
+|            |                            | High          | 1024x1024  | $0.036              |
+|            |                            |               | 1024x1536  | $0.052              |
+|            |                            |               | 1536x1024  | $0.052              |
+| **Google** | Imagen 4                   | Fast          | Default    | $0.02               |
+|            |                            | Standard      | Default    | $0.04               |
+|            |                            | Ultra         | Default    | $0.06               |
+|            |                            | Standard      | Upscaling  | $0.06               |
+|            | Gemini 3 Pro Image Preview | Preview       | Varies     | Contact for pricing |
 
 ### Feature Comparison
 
