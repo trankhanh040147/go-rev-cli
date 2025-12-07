@@ -245,6 +245,7 @@
 - [ ] `revcli build postman` - Generate Postman collections
 - [ ] Interactive file/folder selection with Vim navigation
 - [ ] Read from controller, serializers, routers
+- [ ] After implemented `build mode`, bring file/folder selection feature in `review mode`: add option to include other files than git diff. Interactive files/folders selection like `build mode`
 
 ### Team Features
 - [ ] Shared config via `.revcli.yaml` in repo
