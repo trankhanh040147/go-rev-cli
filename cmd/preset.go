@@ -145,12 +145,15 @@ func runPresetCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("preset '%s' already exists", name)
 	}
 
+	// Create a single reader for stdin to avoid data loss when input is piped
+	// Multiple readers from the same stdin can cause buffered data to be lost
+	stdinReader := bufio.NewReader(os.Stdin)
+
 	// Get description
 	description := presetDescription
 	if description == "" {
 		fmt.Print("Description: ")
-		reader := bufio.NewReader(os.Stdin)
-		desc, err := reader.ReadString('\n')
+		desc, err := stdinReader.ReadString('\n')
 		if err != nil && err != io.EOF {
 			return fmt.Errorf("failed to read description: %w", err)
 		}
@@ -161,11 +164,10 @@ func runPresetCreate(cmd *cobra.Command, args []string) error {
 	promptText := presetPrompt
 	if promptText == "" {
 		fmt.Println("Enter the preset prompt (press Enter twice or Ctrl+D to finish):")
-		reader := bufio.NewReader(os.Stdin)
 		var lines []string
 		emptyCount := 0
 		for {
-			line, err := reader.ReadString('\n')
+			line, err := stdinReader.ReadString('\n')
 			if err == io.EOF {
 				// EOF: add any partial line content, then break
 				line = strings.TrimSuffix(line, "\n")

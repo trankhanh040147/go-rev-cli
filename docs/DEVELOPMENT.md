@@ -23,6 +23,27 @@
 ### Coding Styles
 - Define constants in [...constants.go], no hardcoding
 - **Input Reading:** Never use `fmt.Scanln()` for multi-word input. Use `bufio.NewReader(os.Stdin).ReadString('\n')` instead, then trim with `strings.TrimSpace()` or `strings.TrimSuffix(line, "\n")`. `fmt.Scanln()` only reads up to the first whitespace, causing input buffer pollution and bugs.
+- **Multiple stdin readers:** Never create multiple `bufio.NewReader(os.Stdin)` instances in the same function. Each reader has its own buffer, and when a reader goes out of scope, any unconsumed buffered data is lost. This causes data loss when input is piped or read from a file. Always create a single reader and reuse it for all stdin operations.
+
+### Bug Fix Reminders
+
+**IMPORTANT:** When fixing bugs, always:
+
+1. **Check for similar implementations** - Search the codebase for similar patterns that might have the same issue
+   - Use `rg` (ripgrep) for text search or `fd` for file search to find similar code patterns
+   - Fix all instances, not just the reported one
+   - Example: If fixing a bug with `fmt.Scanln()`, search for all uses with `rg "fmt\.Scanln"` in the codebase
+
+2. **Document the bug and fix** - Add the bug to the Known Bugs section and update Coding Styles if it's a pattern to avoid
+   - Add to Known Bugs table with status "Fixed"
+   - Update Coding Styles section if it's a common mistake to prevent
+   - Add implementation details to help future developers
+
+3. **Test edge cases** - Verify the fix works in different scenarios
+   - Interactive terminal input
+   - Piped input (`echo "data" | command`)
+   - File redirection (`command < file`)
+   - Non-interactive mode
 
 ---
 
@@ -289,6 +310,7 @@
 | Can't press Enter for newline in chat | Fixed | Changed to `Alt+Enter` to send; Enter creates newlines |
 | Textarea has white/highlighted background | Fixed | Custom textarea styling with rounded borders |
 | Preset create fails with multi-word descriptions | Fixed | `fmt.Scanln()` only reads first word; replaced with `bufio.Reader` for full-line input |
+| Multiple stdin readers cause data loss | Fixed | Creating multiple `bufio.NewReader(os.Stdin)` instances causes buffered data loss when input is piped. Fixed by creating a single reader and reusing it. |
 
 ---
 
