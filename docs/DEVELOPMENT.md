@@ -24,6 +24,10 @@
 - Define constants in [...constants.go], no hardcoding
 - **Input Reading:** Never use `fmt.Scanln()` for multi-word input. Use `bufio.NewReader(os.Stdin).ReadString('\n')` instead, then trim with `strings.TrimSpace()` or `strings.TrimSuffix(line, "\n")`. `fmt.Scanln()` only reads up to the first whitespace, causing input buffer pollution and bugs.
 - **Multiple stdin readers:** Never create multiple `bufio.NewReader(os.Stdin)` instances in the same function. Each reader has its own buffer, and when a reader goes out of scope, any unconsumed buffered data is lost. This causes data loss when input is piped or read from a file. Always create a single reader and reuse it for all stdin operations.
+- **Cross-platform file operations:** When opening files or directories in external applications, use OS detection (`runtime.GOOS`) and appropriate commands: `xdg-open` (Linux), `open` (macOS), `explorer` (Windows). For editors, check `$EDITOR` environment variable with a fallback (e.g., `vi`).
+- **Config file management:** Store user configuration in `~/.config/revcli/config.yaml`. Always ensure the config directory exists before writing (`os.MkdirAll()`). Use YAML for structured config data. Provide sensible defaults when config doesn't exist.
+- **Flag definitions:** Never define the same flag twice in `init()` functions. Cobra will panic with "flag redefined" error. When adding flags, check if they're already defined. Use `grep` to search for flag names before adding new ones. Each flag should be defined exactly once per command.
+- **Flag definitions:** Never define the same flag twice in `init()` functions. Cobra will panic with "flag redefined" error. When adding flags, check if they're already defined. Use `grep` to search for flag names before adding new ones.
 
 ### Bug Fix Reminders
 
@@ -316,6 +320,12 @@
 | Textarea has white/highlighted background | Fixed | Custom textarea styling with rounded borders |
 | Preset create fails with multi-word descriptions | Fixed | `fmt.Scanln()` only reads first word; replaced with `bufio.Reader` for full-line input |
 | Multiple stdin readers cause data loss | Fixed | Creating multiple `bufio.NewReader(os.Stdin)` instances causes buffered data loss when input is piped. Fixed by creating a single reader and reusing it. |
+| IS01: Users can't edit custom presets | Fixed | Added `preset edit` command to allow editing custom presets interactively |
+| IS02: Missing feature to edit preset in command line or manually | Fixed | Added `preset edit` command and `preset open` command for manual editing |
+| IS03: Missing feature to open preset folder/file | Fixed | Added `preset open` (opens in editor/file manager) and `preset path` (shows path) commands |
+| IS04: Missing feature to set default preset | Fixed | Added `preset default` command and config.yaml support for default preset |
+| IS05: Preset gets appended to system prompt, should optionally replace it | Fixed | Added `replace` field to preset YAML and `--preset-replace` flag to review command |
+| Flag redefined panic in preset command | Fixed | Duplicate flag definitions in `init()` function caused panic. Fixed by removing duplicate flag registrations. Always check for duplicate flag definitions when adding new flags. |
 
 ---
 

@@ -183,7 +183,7 @@ func (m Model) startReview() tea.Cmd {
 		// Initialize chat with system prompt (with preset if specified)
 		systemPrompt := appcontext.GetSystemPrompt()
 		if m.preset != nil {
-			systemPrompt = appcontext.GetSystemPromptWithPreset(m.preset.Prompt)
+			systemPrompt = appcontext.GetSystemPromptWithPreset(m.preset.Prompt, m.preset.Replace)
 		}
 		m.client.StartChat(systemPrompt)
 
@@ -1177,7 +1177,7 @@ func RunSimple(ctx context.Context, reviewCtx *appcontext.ReviewContext, client 
 	// Initialize chat with system prompt (with preset if specified)
 	systemPrompt := appcontext.GetSystemPrompt()
 	if p != nil {
-		systemPrompt = appcontext.GetSystemPromptWithPreset(p.Prompt)
+		systemPrompt = appcontext.GetSystemPromptWithPreset(p.Prompt, p.Replace)
 	}
 	client.StartChat(systemPrompt)
 

@@ -15,12 +15,13 @@ import (
 )
 
 var (
-	staged      bool
-	model       string
-	force       bool
-	interactive bool
-	baseBranch  string
-	presetName  string
+	staged          bool
+	model           string
+	force           bool
+	interactive     bool
+	baseBranch      string
+	presetName      string
+	presetReplace   bool
 )
 
 // reviewCmd represents the review command
@@ -59,6 +60,7 @@ func init() {
 	reviewCmd.Flags().BoolVarP(&interactive, "interactive", "i", true, "Enable interactive chat mode")
 	reviewCmd.Flags().BoolP("no-interactive", "I", false, "Disable interactive chat mode")
 	reviewCmd.Flags().StringVarP(&presetName, "preset", "p", "", "Review preset (quick, strict, security, performance, logic, style, typo, naming)")
+	reviewCmd.Flags().BoolVar(&presetReplace, "preset-replace", false, "Replace base prompt with preset prompt instead of appending")
 }
 
 func runReview(cmd *cobra.Command, args []string) error {
@@ -81,7 +83,7 @@ func runReview(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot use --staged and --base together. Choose one")
 	}
 
-	// Validate and load preset if specified
+	// Load preset: use specified preset or default preset
 	var activePreset *preset.Preset
 	if presetName != "" {
 		var err error
@@ -89,6 +91,21 @@ func runReview(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+	} else {
+		// Try to load default preset
+		defaultPresetName, err := preset.GetDefaultPreset()
+		if err == nil && defaultPresetName != "" {
+			activePreset, err = preset.Get(defaultPresetName)
+			if err != nil {
+				// Default preset doesn't exist anymore, ignore
+				activePreset = nil
+			}
+		}
+	}
+
+	// Apply --preset-replace flag override if set
+	if activePreset != nil && presetReplace {
+		activePreset.Replace = true
 	}
 
 	// Step 1: Build the review context
@@ -96,7 +113,11 @@ func runReview(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	if activePreset != nil {
-		fmt.Printf("Using preset: %s (%s)\n", activePreset.Name, activePreset.Description)
+		mode := "append"
+		if activePreset.Replace {
+			mode = "replace"
+		}
+		fmt.Printf("Using preset: %s (%s) [mode: %s]\n", activePreset.Name, activePreset.Description, mode)
 	}
 
 	if baseBranch != "" {

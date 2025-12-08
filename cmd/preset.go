@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -19,6 +21,7 @@ var (
 	presetNameFlag    string
 	presetDescription string
 	presetPrompt      string
+	presetUnsetFlag   bool
 )
 
 // presetCmd represents the preset command
@@ -71,16 +74,67 @@ var presetShowCmd = &cobra.Command{
 	RunE:  runPresetShow,
 }
 
+// presetEditCmd edits an existing custom preset
+var presetEditCmd = &cobra.Command{
+	Use:   "edit [name]",
+	Short: "Edit a custom preset",
+	Long:  `Edit an existing custom preset. Built-in presets cannot be edited.`,
+	Args:  cobra.ExactArgs(1),
+	RunE:  runPresetEdit,
+}
+
+// presetOpenCmd opens a preset file in editor or preset directory in file manager
+var presetOpenCmd = &cobra.Command{
+	Use:   "open [name]",
+	Short: "Open preset file or directory",
+	Long: `Open a preset file in your default editor, or open the preset directory in your file manager.
+	
+If a preset name is provided, opens that preset file in $EDITOR (or vi as fallback).
+If no name is provided, opens the preset directory in your file manager.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runPresetOpen,
+}
+
+// presetPathCmd shows the path to a preset file or directory
+var presetPathCmd = &cobra.Command{
+	Use:   "path [name]",
+	Short: "Show preset file or directory path",
+	Long: `Show the file path for a specific preset, or the preset directory path if no name is provided.
+	
+Useful for manual editing or scripting.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runPresetPath,
+}
+
+// presetDefaultCmd manages the default preset
+var presetDefaultCmd = &cobra.Command{
+	Use:   "default [name]",
+	Short: "Set or show the default preset",
+	Long: `Set the default preset to use when --preset flag is not provided, or show the current default preset.
+	
+Examples:
+  revcli preset default quick          # Set 'quick' as default
+  revcli preset default                # Show current default
+  revcli preset default --unset        # Clear default preset`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runPresetDefault,
+}
+
 func init() {
 	rootCmd.AddCommand(presetCmd)
 	presetCmd.AddCommand(presetListCmd)
 	presetCmd.AddCommand(presetCreateCmd)
 	presetCmd.AddCommand(presetDeleteCmd)
 	presetCmd.AddCommand(presetShowCmd)
+	presetCmd.AddCommand(presetEditCmd)
+	presetCmd.AddCommand(presetOpenCmd)
+	presetCmd.AddCommand(presetPathCmd)
+	presetCmd.AddCommand(presetDefaultCmd)
 
 	presetCreateCmd.Flags().StringVarP(&presetNameFlag, "name", "n", "", "Preset name")
 	presetCreateCmd.Flags().StringVarP(&presetDescription, "description", "d", "", "Preset description")
 	presetCreateCmd.Flags().StringVarP(&presetPrompt, "prompt", "p", "", "Preset prompt text")
+	presetDefaultCmd.Flags().BoolVar(&presetUnsetFlag, "unset", false, "Clear the default preset")
 }
 
 func runPresetList(cmd *cobra.Command, args []string) error {
@@ -306,6 +360,150 @@ func runPresetShow(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func runPresetEdit(cmd *cobra.Command, args []string) error {
+	name := args[0]
+
+	// Check if it's a built-in preset
+	if _, ok := preset.BuiltInPresets[strings.ToLower(name)]; ok {
+		return fmt.Errorf("cannot edit built-in preset '%s'. Use 'revcli preset create' to create a custom preset", name)
+	}
+
+	// Load existing preset
+	p, err := preset.Get(name)
+	if err != nil {
+		return fmt.Errorf("preset '%s' not found: %w", name, err)
+	}
+
+	// Verify it's a custom preset by checking if file exists
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	normalizedName := strings.ToLower(name)
+	presetPath := filepath.Join(homeDir, ".config", "revcli", "presets", normalizedName+".yaml")
+	if _, err := os.Stat(presetPath); os.IsNotExist(err) {
+		return fmt.Errorf("preset '%s' is not a custom preset and cannot be edited", name)
+	}
+
+	fmt.Println(ui.RenderTitle(fmt.Sprintf("✏️  Editing Preset: %s", p.Name)))
+	fmt.Println()
+	fmt.Println("Press Enter to keep current value, or type a new value.")
+	fmt.Println()
+
+	// Create a single reader for stdin to avoid data loss when input is piped
+	stdinReader := bufio.NewReader(os.Stdin)
+
+	// Edit name
+	fmt.Printf("Name [%s]: ", p.Name)
+	nameInput, err := stdinReader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return fmt.Errorf("failed to read name: %w", err)
+	}
+	newName := strings.TrimSpace(nameInput)
+	if newName == "" {
+		newName = p.Name
+	} else {
+		// Check if new name conflicts with existing preset (unless it's the same preset)
+		if newName != p.Name {
+			_, err := preset.Get(newName)
+			if err == nil {
+				return fmt.Errorf("preset '%s' already exists", newName)
+			}
+		}
+	}
+
+	// Edit description
+	fmt.Printf("Description [%s]: ", p.Description)
+	descInput, err := stdinReader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return fmt.Errorf("failed to read description: %w", err)
+	}
+	newDescription := strings.TrimSpace(descInput)
+	if newDescription == "" {
+		newDescription = p.Description
+	}
+
+	// Edit prompt
+	fmt.Println("Prompt (press Enter twice or Ctrl+D to finish, or just Enter to keep current):")
+	fmt.Println("Current prompt:")
+	fmt.Println(p.Prompt)
+	fmt.Println()
+	fmt.Println("Enter new prompt (or press Enter twice to keep current):")
+	var lines []string
+	emptyCount := 0
+	for {
+		line, err := stdinReader.ReadString('\n')
+		if err == io.EOF {
+			// EOF: add any partial line content, then break
+			line = strings.TrimSuffix(line, "\n")
+			if line != "" {
+				lines = append(lines, line)
+			}
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read prompt: %w", err)
+		}
+		// Trim the newline character
+		line = strings.TrimSuffix(line, "\n")
+		if line == "" {
+			emptyCount++
+			if emptyCount >= 2 {
+				break
+			}
+		} else {
+			emptyCount = 0
+			lines = append(lines, line)
+		}
+	}
+	newPrompt := strings.Join(lines, "\n")
+	if newPrompt == "" {
+		newPrompt = p.Prompt
+	}
+
+	if newPrompt == "" {
+		return fmt.Errorf("prompt text is required")
+	}
+
+	// Update preset
+	p.Name = newName
+	p.Description = newDescription
+	p.Prompt = newPrompt
+
+	// If name changed, we need to delete old file and create new one
+	newNormalizedName := strings.ToLower(newName)
+	newPresetPath := filepath.Join(homeDir, ".config", "revcli", "presets", newNormalizedName+".yaml")
+
+	// Save to file
+	presetDir := filepath.Join(homeDir, ".config", "revcli", "presets")
+	if err := os.MkdirAll(presetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create preset directory: %w", err)
+	}
+
+	data, err := yaml.Marshal(&p)
+	if err != nil {
+		return fmt.Errorf("failed to marshal preset: %w", err)
+	}
+
+	if err := os.WriteFile(newPresetPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write preset file: %w", err)
+	}
+
+	// If name changed, delete old file
+	if normalizedName != newNormalizedName {
+		if err := os.Remove(presetPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove old preset file: %w", err)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println(ui.RenderSuccess(fmt.Sprintf("Preset '%s' updated successfully!", newNormalizedName)))
+	fmt.Printf("Location: %s\n", newPresetPath)
+
+	return nil
+}
+
 // listCustomPresets returns a list of custom preset names
 func listCustomPresets() ([]string, error) {
 	homeDir, err := os.UserHomeDir()
@@ -334,4 +532,160 @@ func listCustomPresets() ([]string, error) {
 	}
 
 	return presets, nil
+}
+
+func runPresetOpen(cmd *cobra.Command, args []string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	presetDir := filepath.Join(homeDir, ".config", "revcli", "presets")
+
+	if len(args) > 0 {
+		// Open specific preset file in editor
+		name := args[0]
+
+		// Check if it's a built-in preset
+		if _, ok := preset.BuiltInPresets[strings.ToLower(name)]; ok {
+			return fmt.Errorf("cannot open built-in preset '%s'. Built-in presets are not stored as files", name)
+		}
+
+		// Check if custom preset exists
+		_, err := preset.Get(name)
+		if err != nil {
+			return fmt.Errorf("preset '%s' not found: %w", name, err)
+		}
+
+		normalizedName := strings.ToLower(name)
+		presetPath := filepath.Join(presetDir, normalizedName+".yaml")
+
+		// Check if file exists
+		if _, err := os.Stat(presetPath); os.IsNotExist(err) {
+			return fmt.Errorf("preset file '%s' does not exist", presetPath)
+		}
+
+		// Get editor from environment or use fallback
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = "vi" // Default fallback
+		}
+
+		// Open file in editor
+		editCmd := exec.Command(editor, presetPath)
+		editCmd.Stdin = os.Stdin
+		editCmd.Stdout = os.Stdout
+		editCmd.Stderr = os.Stderr
+
+		if err := editCmd.Run(); err != nil {
+			return fmt.Errorf("failed to open editor: %w", err)
+		}
+
+		fmt.Println(ui.RenderSuccess(fmt.Sprintf("Opened preset '%s' in %s", name, editor)))
+	} else {
+		// Open preset directory in file manager
+		// Ensure directory exists
+		if err := os.MkdirAll(presetDir, 0755); err != nil {
+			return fmt.Errorf("failed to create preset directory: %w", err)
+		}
+
+		var openCmd *exec.Cmd
+		switch runtime.GOOS {
+		case "linux":
+			openCmd = exec.Command("xdg-open", presetDir)
+		case "darwin":
+			openCmd = exec.Command("open", presetDir)
+		case "windows":
+			openCmd = exec.Command("explorer", presetDir)
+		default:
+			return fmt.Errorf("unsupported operating system: %s. Please open the directory manually: %s", runtime.GOOS, presetDir)
+		}
+
+		if err := openCmd.Run(); err != nil {
+			return fmt.Errorf("failed to open file manager: %w. Directory: %s", err, presetDir)
+		}
+
+		fmt.Println(ui.RenderSuccess(fmt.Sprintf("Opened preset directory: %s", presetDir)))
+	}
+
+	return nil
+}
+
+func runPresetPath(cmd *cobra.Command, args []string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	presetDir := filepath.Join(homeDir, ".config", "revcli", "presets")
+
+	if len(args) > 0 {
+		// Show path to specific preset file
+		name := args[0]
+
+		// Check if it's a built-in preset
+		if _, ok := preset.BuiltInPresets[strings.ToLower(name)]; ok {
+			return fmt.Errorf("built-in preset '%s' does not have a file path. Built-in presets are embedded in the application", name)
+		}
+
+		// Check if custom preset exists
+		_, err := preset.Get(name)
+		if err != nil {
+			return fmt.Errorf("preset '%s' not found: %w", name, err)
+		}
+
+		normalizedName := strings.ToLower(name)
+		presetPath := filepath.Join(presetDir, normalizedName+".yaml")
+
+		fmt.Println(presetPath)
+	} else {
+		// Show preset directory path
+		fmt.Println(presetDir)
+	}
+
+	return nil
+}
+
+func runPresetDefault(cmd *cobra.Command, args []string) error {
+	// Handle --unset flag
+	if presetUnsetFlag {
+		if err := preset.ClearDefaultPreset(); err != nil {
+			return fmt.Errorf("failed to clear default preset: %w", err)
+		}
+		fmt.Println(ui.RenderSuccess("Default preset cleared."))
+		return nil
+	}
+
+	// If name provided, set default
+	if len(args) > 0 {
+		name := args[0]
+
+		// Validate preset exists
+		_, err := preset.Get(name)
+		if err != nil {
+			return fmt.Errorf("preset '%s' not found: %w", name, err)
+		}
+
+		if err := preset.SetDefaultPreset(name); err != nil {
+			return fmt.Errorf("failed to set default preset: %w", err)
+		}
+
+		fmt.Println(ui.RenderSuccess(fmt.Sprintf("Default preset set to '%s'", name)))
+		return nil
+	}
+
+	// No args: show current default
+	defaultPreset, err := preset.GetDefaultPreset()
+	if err != nil {
+		return fmt.Errorf("failed to load default preset: %w", err)
+	}
+
+	if defaultPreset == "" {
+		fmt.Println("No default preset is set.")
+		fmt.Println("Use 'revcli preset default <name>' to set one.")
+	} else {
+		fmt.Printf("Default preset: %s\n", ui.RenderSuccess(defaultPreset))
+	}
+
+	return nil
 }

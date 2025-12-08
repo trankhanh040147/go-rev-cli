@@ -101,7 +101,12 @@ func GetSystemPrompt() string {
 }
 
 // GetSystemPromptWithPreset returns the system prompt modified by a preset
-func GetSystemPromptWithPreset(presetPrompt string) string {
+// If replace is true, returns only the preset prompt (replacing the base prompt)
+// If replace is false, appends the preset prompt to the base prompt (default behavior)
+func GetSystemPromptWithPreset(presetPrompt string, replace bool) string {
+	if replace {
+		return presetPrompt
+	}
 	return prompt.SystemPrompt + "\n\n---\n\n" + presetPrompt
 }
 

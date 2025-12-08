@@ -14,6 +14,12 @@ type Preset struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 	Prompt      string `yaml:"prompt"`
+	Replace     bool   `yaml:"replace,omitempty"` // If true, replace base prompt instead of appending
+}
+
+// Config defines the revcli configuration
+type Config struct {
+	DefaultPreset string `yaml:"default_preset,omitempty"`
 }
 
 // BuiltInPresets contains all built-in review presets
@@ -390,4 +396,94 @@ func List() []Preset {
 // ApplyToPrompt appends the preset's prompt modifier to the base system prompt
 func (p *Preset) ApplyToPrompt(basePrompt string) string {
 	return basePrompt + "\n\n---\n\n" + p.Prompt
+}
+
+// getConfigPath returns the path to the config file
+func getConfigPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, ".config", "revcli", "config.yaml"), nil
+}
+
+// LoadConfig loads the configuration from ~/.config/revcli/config.yaml
+func LoadConfig() (*Config, error) {
+	configPath, err := getConfigPath()
+	if err != nil {
+		return nil, err
+	}
+
+	// If config file doesn't exist, return default config
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return &Config{}, nil
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config Config
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	return &config, nil
+}
+
+// SaveConfig saves the configuration to ~/.config/revcli/config.yaml
+func SaveConfig(config *Config) error {
+	configPath, err := getConfigPath()
+	if err != nil {
+		return err
+	}
+
+	// Ensure config directory exists
+	configDir := filepath.Dir(configPath)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	data, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
+}
+
+// GetDefaultPreset returns the default preset name from config, or empty string if not set
+func GetDefaultPreset() (string, error) {
+	config, err := LoadConfig()
+	if err != nil {
+		return "", err
+	}
+	return config.DefaultPreset, nil
+}
+
+// SetDefaultPreset sets the default preset in the config file
+func SetDefaultPreset(presetName string) error {
+	config, err := LoadConfig()
+	if err != nil {
+		return err
+	}
+
+	config.DefaultPreset = presetName
+	return SaveConfig(config)
+}
+
+// ClearDefaultPreset removes the default preset from the config file
+func ClearDefaultPreset() error {
+	config, err := LoadConfig()
+	if err != nil {
+		return err
+	}
+
+	config.DefaultPreset = ""
+	return SaveConfig(config)
 }
