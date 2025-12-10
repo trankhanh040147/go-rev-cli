@@ -17,6 +17,49 @@ type Preset struct {
 	Replace     bool   `yaml:"replace,omitempty"` // If true, replace base prompt instead of appending
 }
 
+// MarshalYAML implements custom YAML marshaling to use literal block scalars for multiline prompts
+func (p *Preset) MarshalYAML() (interface{}, error) {
+	// Build the mapping node manually to control formatting
+	root := &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Content: []*yaml.Node{},
+	}
+
+	// Add name field
+	root.Content = append(root.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: "name"},
+		&yaml.Node{Kind: yaml.ScalarNode, Value: p.Name},
+	)
+
+	// Add description field
+	root.Content = append(root.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: "description"},
+		&yaml.Node{Kind: yaml.ScalarNode, Value: p.Description},
+	)
+
+	// Add prompt field with literal style for multiline content
+	promptNode := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: p.Prompt,
+		Style: yaml.LiteralStyle, // Use | literal block scalar
+	}
+	root.Content = append(root.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: "prompt"},
+		promptNode,
+	)
+
+	// Add replace field only if true
+	if p.Replace {
+		root.Content = append(root.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: "replace"},
+			&yaml.Node{Kind: yaml.ScalarNode, Value: "true"},
+		)
+	}
+
+	// Return root node directly - yaml.Marshal() will wrap it in a document automatically
+	return root, nil
+}
+
 // Config defines the revcli configuration
 type Config struct {
 	DefaultPreset string `yaml:"default_preset,omitempty"`

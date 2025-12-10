@@ -180,6 +180,61 @@ func init() {
 	presetDefaultCmd.Flags().BoolVar(&presetUnsetFlag, "unset", false, "Clear the default preset")
 }
 
+// editMultilineText opens the current text in an external editor and returns the edited content
+func editMultilineText(prompt string, currentValue string) (string, error) {
+	// Create temporary file
+	tmpFile, err := os.CreateTemp("", "revcli-edit-*.txt")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath) // Clean up temp file
+
+	// Write current value to temp file
+	if _, err := tmpFile.WriteString(currentValue); err != nil {
+		tmpFile.Close()
+		return "", fmt.Errorf("failed to write to temp file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	// Get editor from environment or use fallback
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi" // Default fallback
+	}
+
+	// Show prompt message
+	if prompt != "" {
+		fmt.Println(prompt)
+	}
+	fmt.Printf("Opening editor (%s)... Press Ctrl+X then Y to save and exit (vim), or Ctrl+O then Enter (nano).\n", editor)
+
+	// Open file in editor
+	editCmd := exec.Command(editor, tmpPath)
+	editCmd.Stdin = os.Stdin
+	editCmd.Stdout = os.Stdout
+	editCmd.Stderr = os.Stderr
+
+	if err := editCmd.Run(); err != nil {
+		return "", fmt.Errorf("editor exited with error: %w", err)
+	}
+
+	// Read back edited content
+	editedData, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read edited file: %w", err)
+	}
+
+	// Remove trailing line endings (handle both \r\n and \n)
+	editedText := string(editedData)
+	editedText = strings.TrimSuffix(editedText, "\r\n") // Windows line ending
+	editedText = strings.TrimSuffix(editedText, "\n")   // Unix line ending
+
+	return editedText, nil
+}
+
 func runPresetList(cmd *cobra.Command, args []string) error {
 	fmt.Println(ui.RenderTitle("📋 Available Presets"))
 	fmt.Println()
@@ -260,39 +315,14 @@ func runPresetCreate(cmd *cobra.Command, args []string) error {
 	// Get prompt
 	promptText := presetPrompt
 	if promptText == "" {
-		fmt.Println("Enter the preset prompt (press Enter twice or Ctrl+D to finish):")
-		var lines []string
-		emptyCount := 0
-		for {
-			line, err := stdinReader.ReadString('\n')
-			if err == io.EOF {
-				// EOF: add any partial line content, then break
-				line = strings.TrimSuffix(line, "\n")
-				if line != "" {
-					lines = append(lines, line)
-				}
-				// If we have no content at all, user cancelled
-				if len(lines) == 0 {
-					return fmt.Errorf("prompt input cancelled")
-				}
-				break
-			}
-			if err != nil {
-				return fmt.Errorf("failed to read prompt: %w", err)
-			}
-			// Trim the newline character
-			line = strings.TrimSuffix(line, "\n")
-			if line == "" {
-				emptyCount++
-				if emptyCount >= 2 {
-					break
-				}
-			} else {
-				emptyCount = 0
-				lines = append(lines, line)
-			}
+		var err error
+		promptText, err = editMultilineText("Enter the preset prompt:", "")
+		if err != nil {
+			return fmt.Errorf("failed to edit prompt: %w", err)
 		}
-		promptText = strings.Join(lines, "\n")
+		if strings.TrimSpace(promptText) == "" {
+			return fmt.Errorf("prompt input cancelled or empty")
+		}
 	}
 
 	if promptText == "" {
@@ -431,33 +461,16 @@ func runPresetEdit(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(ui.RenderTitle(fmt.Sprintf("✏️  Editing Preset: %s", p.Name)))
 	fmt.Println()
-	fmt.Println("Press Enter to keep current value, or type a new value.")
+	fmt.Printf("Name: %s (read-only)\n", p.Name)
+	fmt.Println()
+	fmt.Println("Current values are shown in brackets. Press Enter to keep, or type a new value.")
 	fmt.Println()
 
 	// Create a single reader for stdin to avoid data loss when input is piped
 	stdinReader := bufio.NewReader(os.Stdin)
 
-	// Edit name
-	fmt.Printf("Name [%s]: ", p.Name)
-	nameInput, err := stdinReader.ReadString('\n')
-	if err != nil && err != io.EOF {
-		return fmt.Errorf("failed to read name: %w", err)
-	}
-	newName := strings.TrimSpace(nameInput)
-	if newName == "" {
-		newName = p.Name
-	} else {
-		// Check if new name conflicts with existing preset (unless it's the same preset)
-		if newName != p.Name {
-			_, err := preset.Get(newName)
-			if err == nil {
-				return fmt.Errorf("preset '%s' already exists", newName)
-			}
-		}
-	}
-
 	// Edit description
-	fmt.Printf("Description [%s]: ", p.Description)
+	fmt.Printf("Description [%s] (press Enter to keep): ", p.Description)
 	descInput, err := stdinReader.ReadString('\n')
 	if err != nil && err != io.EOF {
 		return fmt.Errorf("failed to read description: %w", err)
@@ -467,41 +480,15 @@ func runPresetEdit(cmd *cobra.Command, args []string) error {
 		newDescription = p.Description
 	}
 
-	// Edit prompt
-	fmt.Println("Prompt (press Enter twice or Ctrl+D to finish, or just Enter to keep current):")
+	// Edit prompt using external editor
 	fmt.Println("Current prompt:")
 	fmt.Println(p.Prompt)
 	fmt.Println()
-	fmt.Println("Enter new prompt (or press Enter twice to keep current):")
-	var lines []string
-	emptyCount := 0
-	for {
-		line, err := stdinReader.ReadString('\n')
-		if err == io.EOF {
-			// EOF: add any partial line content, then break
-			line = strings.TrimSuffix(line, "\n")
-			if line != "" {
-				lines = append(lines, line)
-			}
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("failed to read prompt: %w", err)
-		}
-		// Trim the newline character
-		line = strings.TrimSuffix(line, "\n")
-		if line == "" {
-			emptyCount++
-			if emptyCount >= 2 {
-				break
-			}
-		} else {
-			emptyCount = 0
-			lines = append(lines, line)
-		}
+	newPrompt, err := editMultilineText("Enter new prompt (or leave empty to keep current):", p.Prompt)
+	if err != nil {
+		return fmt.Errorf("failed to edit prompt: %w", err)
 	}
-	newPrompt := strings.Join(lines, "\n")
-	if newPrompt == "" {
+	if strings.TrimSpace(newPrompt) == "" {
 		newPrompt = p.Prompt
 	}
 
@@ -509,16 +496,11 @@ func runPresetEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("prompt text is required")
 	}
 
-	// Update preset
-	p.Name = newName
+	// Update preset (name remains unchanged)
 	p.Description = newDescription
 	p.Prompt = newPrompt
 
-	// If name changed, we need to delete old file and create new one
-	newNormalizedName := strings.ToLower(newName)
-	newPresetPath := filepath.Join(homeDir, ".config", "revcli", "presets", newNormalizedName+".yaml")
-
-	// Save to file
+	// Save to file (using original path since name doesn't change)
 	presetDir := filepath.Join(homeDir, ".config", "revcli", "presets")
 	if err := os.MkdirAll(presetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create preset directory: %w", err)
@@ -529,20 +511,13 @@ func runPresetEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to marshal preset: %w", err)
 	}
 
-	if err := os.WriteFile(newPresetPath, data, 0644); err != nil {
+	if err := os.WriteFile(presetPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write preset file: %w", err)
 	}
 
-	// If name changed, delete old file
-	if normalizedName != newNormalizedName {
-		if err := os.Remove(presetPath); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to remove old preset file: %w", err)
-		}
-	}
-
 	fmt.Println()
-	fmt.Println(ui.RenderSuccess(fmt.Sprintf("Preset '%s' updated successfully!", newNormalizedName)))
-	fmt.Printf("Location: %s\n", newPresetPath)
+	fmt.Println(ui.RenderSuccess(fmt.Sprintf("Preset '%s' updated successfully!", normalizedName)))
+	fmt.Printf("Location: %s\n", presetPath)
 
 	return nil
 }
@@ -782,43 +757,13 @@ func runPresetSystemEdit(cmd *cobra.Command, args []string) error {
 		fmt.Println(currentPrompt)
 		fmt.Println()
 	}
-	fmt.Println("Enter new system prompt (press Enter twice or Ctrl+D to finish):")
-
-	// Create a single reader for stdin to avoid data loss when input is piped
-	stdinReader := bufio.NewReader(os.Stdin)
-
-	var lines []string
-	emptyCount := 0
-	for {
-		line, err := stdinReader.ReadString('\n')
-		if err == io.EOF {
-			// EOF: add any partial line content, then break
-			line = strings.TrimSuffix(line, "\n")
-			if line != "" {
-				lines = append(lines, line)
-			}
-			// If we have no content at all, user cancelled
-			if len(lines) == 0 {
-				return fmt.Errorf("system prompt input cancelled")
-			}
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("failed to read system prompt: %w", err)
-		}
-		// Trim the newline character
-		line = strings.TrimSuffix(line, "\n")
-		if line == "" {
-			emptyCount++
-			if emptyCount >= 2 {
-				break
-			}
-		} else {
-			emptyCount = 0
-			lines = append(lines, line)
-		}
+	newPrompt, err := editMultilineText("Enter new system prompt:", currentPrompt)
+	if err != nil {
+		return fmt.Errorf("failed to edit system prompt: %w", err)
 	}
-	newPrompt := strings.Join(lines, "\n")
+	if strings.TrimSpace(newPrompt) == "" {
+		return fmt.Errorf("system prompt input cancelled or empty")
+	}
 
 	if newPrompt == "" {
 		return fmt.Errorf("system prompt text is required")

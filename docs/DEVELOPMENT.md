@@ -36,6 +36,8 @@
 - **Timeouts:** Default to a timeout for all network/IO contexts. Never allow a CLI command to hang indefinitely without user feedback.
 - **Iterators:** When using Google API iterators (`google.golang.org/api/iterator`), check `if err == iterator.Done` before treating errors as exceptions. `iterator.Done` signals normal end-of-stream, not an error condition.
 - **File Size:** Manage code files into small parts to reduce token costs. Split large files, keep functions focused, prefer smaller modules.
+- **Line Endings:** When reading files edited by external editors, handle both Windows (`\r\n`) and Unix (`\n`) line endings. Remove trailing line endings in order: `\r\n` first, then `\n`. Prevents trailing carriage returns. 
+- **YAML Marshaling:** When use `MarshalYAML()`, return root node (MappingNode/SequenceNode) directly, not wrapped in a DocumentNode. 
 
 ## Bug Fix Protocol
 
@@ -288,6 +290,10 @@
 
 > Raw ideas for future consideration
 
+**Presets**
+- Remove `built-in` type, built-in treated as custom presets
+
+**Uncategorized**
 - Make the base prompt more generic/neutral (Not just Go reviewer)
 - Compare two branches directly (`revcli diff main feature-branch`)
 - Review specific files only (`revcli review src/api.go`)
@@ -302,27 +308,31 @@
 
 > Track and fix these issues
 
-| Bug | Status | Notes |
-|-----|--------|-------|
-| Navigation issues after reviews | Fixed | No longer auto-scrolls to bottom; users read from top |
-| Redundant spaces below terminal | Fixed | Dynamic viewport height calculation based on UI state |
-| Yank only copies initial review | Fixed | Now yanks full content including chat history |
-| Yank code block limited | Open | Always yanks the **last** code block; no way to select specific block (requires Code Block Highlighting feature) |
-| Panic when using --interactive flag | Fixed | Added nil checks for renderer fallback |
-| Can't type `?` in chat mode | Fixed | `?` now only triggers help in reviewing mode, passes through in chat |
-| Can't press Enter for newline in chat | Fixed | Changed to `Alt+Enter` to send; Enter creates newlines |
-| Textarea has white/highlighted background | Fixed | Custom textarea styling with rounded borders |
-| Preset create fails with multi-word descriptions | Fixed | `fmt.Scanln()` only reads first word; replaced with `bufio.Reader` for full-line input |
-| Multiple stdin readers cause data loss | Fixed | Creating multiple `bufio.NewReader(os.Stdin)` instances causes buffered data loss when input is piped. Fixed by creating a single reader and reusing it. |
-| IS01: Users can't edit custom presets | Fixed | Added `preset edit` command to allow editing custom presets interactively |
-| IS02: Missing feature to edit preset in command line or manually | Fixed | Added `preset edit` command and `preset open` command for manual editing |
-| IS03: Missing feature to open preset folder/file | Fixed | Added `preset open` (opens in editor/file manager) and `preset path` (shows path) commands |
-| IS04: Missing feature to set default preset | Fixed | Added `preset default` command and config.yaml support for default preset |
-| IS05: Preset gets appended to system prompt, should optionally replace it | Fixed | Added `replace` field to preset YAML and `--preset-replace` flag to review command |
-| Flag redefined panic in preset command | Fixed | Duplicate flag definitions in `init()` function caused panic. Fixed by removing duplicate flag registrations. Always check for duplicate flag definitions when adding new flags. |
-| IS06: No helper found when run `rv review -h` | Fixed | Added `--preset-replace` flag to help examples in command Long description |
-| IS07: Flag is too long, not great for typing | Fixed | Added short alias `-R` for `--preset-replace` flag using `BoolVarP` |
-| IS08: Missing feature: edit system prompt | Fixed | Added `preset system` command with `show/edit/reset` subcommands. System prompt can be customized via `~/.config/revcli/presets/system.yaml` |
+| Bug                                                                       | Status | Notes                                                                                                                                                                            |                                         |
+| ------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Navigation issues after reviews                                           | Fixed  | No longer auto-scrolls to bottom; users read from top                                                                                                                            |                                         |
+| Redundant spaces below terminal                                           | Fixed  | Dynamic viewport height calculation based on UI state                                                                                                                            |                                         |
+| Yank only copies initial review                                           | Fixed  | Now yanks full content including chat history                                                                                                                                    |                                         |
+| Yank code block limited                                                   | Open   | Always yanks the **last** code block; no way to select specific block (requires Code Block Highlighting feature)                                                                 |                                         |
+| Panic when using --interactive flag                                       | Fixed  | Added nil checks for renderer fallback                                                                                                                                           |                                         |
+| Can't type `?` in chat mode                                               | Fixed  | `?` now only triggers help in reviewing mode, passes through in chat                                                                                                             |                                         |
+| Can't press Enter for newline in chat                                     | Fixed  | Changed to `Alt+Enter` to send; Enter creates newlines                                                                                                                           |                                         |
+| Textarea has white/highlighted background                                 | Fixed  | Custom textarea styling with rounded borders                                                                                                                                     |                                         |
+| Preset create fails with multi-word descriptions                          | Fixed  | `fmt.Scanln()` only reads first word; replaced with `bufio.Reader` for full-line input                                                                                           |                                         |
+| Multiple stdin readers cause data loss                                    | Fixed  | Creating multiple `bufio.NewReader(os.Stdin)` instances causes buffered data loss when input is piped. Fixed by creating a single reader and reusing it.                         |                                         |
+| IS01: Users can't edit custom presets                                     | Fixed  | Added `preset edit` command to allow editing custom presets interactively                                                                                                        |                                         |
+| IS02: Missing feature to edit preset in command line or manually          | Fixed  | Added `preset edit` command and `preset open` command for manual editing                                                                                                         |                                         |
+| IS03: Missing feature to open preset folder/file                          | Fixed  | Added `preset open` (opens in editor/file manager) and `preset path` (shows path) commands                                                                                       |                                         |
+| IS04: Missing feature to set default preset                               | Fixed  | Added `preset default` command and config.yaml support for default preset                                                                                                        |                                         |
+| IS05: Preset gets appended to system prompt, should optionally replace it | Fixed  | Added `replace` field to preset YAML and `--preset-replace` flag to review command                                                                                               |                                         |
+| Flag redefined panic in preset command                                    | Fixed  | Duplicate flag definitions in `init()` function caused panic. Fixed by removing duplicate flag registrations. Always check for duplicate flag definitions when adding new flags. |                                         |
+| IS06: No helper found when run `rv review -h`                             | Fixed  | Added `--preset-replace` flag to help examples in command Long description                                                                                                       |                                         |
+| IS07: Flag is too long, not great for typing                              | Fixed  | Added short alias `-R` for `--preset-replace` flag using `BoolVarP`                                                                                                              |                                         |
+| IS08: Missing feature: edit system prompt                                 | Fixed  | Added `preset system` command with `show/edit/reset` subcommands. System prompt can be customized via `~/.config/revcli/presets/system.yaml`                                     |                                         |
+| IS09: Fail to edit when enter a different name                            | Fixed  | Disabled name editing in `preset edit` command. Name is now read-only to prevent data loss.                                                                                      |                                         |
+| IS10: Not enter default value when editing                                | Fixed  | Improved default value prompts with clearer instructions and explicit current value display.                                                                                     |                                         |
+| IS11: Can not move cursor up and down when edit prompt                    | Fixed  | Replaced line-by-line stdin input with external editor (`$EDITOR` or `vi` fallback) for multiline prompt editing.                                                                |                                         |
+| IS12: Preset files when saved got `\n` instead of breaks                  | Fixed  | Added custom `MarshalYAML()` method to `Preset` struct to use literal block scalars (`                                                                                           | `) for multiline prompts in YAML files. |
 
 ---
 
