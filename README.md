@@ -159,9 +159,8 @@ When running in interactive mode (default), you can:
 - **View the review:** The AI analysis is displayed in a scrollable viewport
 - **Ask follow-up questions:** Press `Enter` to enter chat mode, then `Alt+Enter` to send
 - **Navigate:** Use Vim-style keys (`j/k` for up/down, `g/G` for top/bottom) or arrow keys
-- **Code blocks:** Press `[` and `]` to navigate between code blocks, `yb` to copy highlighted block
 - **Search:** Press `/` to search within the review, `n/N` for next/previous match
-- **Yank to clipboard:** Press `y` to copy entire review, `Y` for last response only, `yb` for code blocks
+- **Yank to clipboard:** Press `y` (or `yy`) to copy entire review, `Y` for last response only
 - **Prompt history:** In chat mode, use `Ctrl+P` (previous) and `Ctrl+N` (next) to navigate prompt history
 - **Cancel requests:** Press `Ctrl+X` to cancel a streaming request
 - **Help:** Press `?` to see all available keybindings

@@ -1,51 +1,25 @@
 # Development Roadmap
 
-## Design Principles
+## Design Principles & Coding Standards
 
-> These principles guide all feature development and UX decisions.
+> **Reference:** All design principles, coding standards, and implementation guidelines are defined in [`.cursor/rules/rules.mdc`](../.cursor/rules/rules.mdc).
 
-### Vim-Style Navigation
-- All navigation should adapt Vim-style keybindings (`j/k`, `g/G`, `/`, etc.)
-- Modal interface where appropriate (normal mode, chat mode, search mode)
-- **IMPORTANT:** When adding new keyboard shortcuts, always update the help panel (`internal/ui/help.go`) to document them
+### How To Apply These Rules
 
-### Concise CLI Flags
-- All flags should have short aliases for easy typing
-- Example: `--force` → `-f`, `--staged` → `-s`
-- Flags must be unique per command
-- Do not redefine flags in `init()`
+Automatically loads rules from the `.cursor/rules/` directory. The `rules.mdc` file includes `alwaysApply: true` in its frontmatter, which ensures:
 
-### Keyboard-First UX
-- Every action should be accessible via keyboard
-- `?` shows help overlay with all keybindings
-- Minimize mouse dependency
-
-## Coding Styles
-
-- **Constants:** Define in `[...constants.go]`. No hardcoding.
-- **Input Reading:** Avoid `fmt.Scanln` (stops at whitespace). Use `bufio.NewReader(os.Stdin).ReadString('\n')`. Trim using `strings.TrimSpace` or `TrimSuffix`.
-- **Stdin:** Never create multiple `bufio.NewReader(os.Stdin)` instances in the same function. Instantiate **once** and reuse. Multiple instances cause data loss in pipes/file reads.
-- **OS Ops:** Use `runtime.GOOS` for external commands: `xdg-open` (Linux), `open` (macOS), `explorer` (Windows). Editor: Use `$EDITOR` env var or fallback.
-- **Config:** Path: `~/.config/langtut/config.yaml`. Ensure dir exists (`os.MkdirAll`). Use YAML. Set defaults if missing.
-- **Flags:** Ensure flags are unique per command. Do not redefine in `init()`. Verify existence before adding.
-- **Streams:** Strict separation: logical output → `os.Stdout`, logs/errors/debug → `os.Stderr`. Enables clean piping (`cmd > file`).
-- **Signal Handling:** Listen for `os.Interrupt` (`SIGINT`/`SIGTERM`). Cancel root `context` to trigger graceful shutdown/cleanup. Do not use `os.Exit` deep in library code.
-- **Cobra Usage:** Use `RunE` instead of `Run`. Return errors to `main` for centralized handling/exit codes. Validate inputs in `Args` or `PreRunE`, not logic body.
-- **TTY Detection:** Check if `stdout` is a terminal (`isatty`). Disable colors, spinners, and interactive prompts if piping or if `NO_COLOR` env is present.
-- **Concurrency:** Use `errgroup.Group` over raw `sync.WaitGroup` to propagate errors and handle context cancellation across multiple goroutines.
-- **Timeouts:** Default to a timeout for all network/IO contexts. Never allow a CLI command to hang indefinitely without user feedback.
-- **Iterators:** When using Google API iterators (`google.golang.org/api/iterator`), check `if err == iterator.Done` before treating errors as exceptions. `iterator.Done` signals normal end-of-stream, not an error condition.
-- **File Size:** Manage code files into small parts to reduce token costs. Split large files, keep functions focused, prefer smaller modules.
-- **Line Endings:** When reading files edited by external editors, handle both Windows (`\r\n`) and Unix (`\n`) line endings. Remove trailing line endings in order: `\r\n` first, then `\n`. Prevents trailing carriage returns. 
-- **YAML Marshaling:** When use `MarshalYAML()`, return root node (MappingNode/SequenceNode) directly, not wrapped in a DocumentNode. 
+- **Automatic Application:** Rules are always active during coding sessions
+- **Context Awareness:** Understands project-specific patterns (Vim navigation, TUI-first UX, Go conventions)
+- **Consistency:** All code suggestions follow the defined principles without manual reminders
 
 ## Bug Fix Protocol
 
 1. **Global Fix:** Search codebase (`rg`/`fd`) for similar patterns/implementations. Fix **all** occurrences, not just the reported one.
 2. **Documentation:**
     - Update "Known Bugs" table (Status: Fixed).
-    - Update "Coding Styles" if the bug reflects a common anti-pattern.
+    - Update coding standards in `.cursor/rules/rules.mdc` if the bug reflects a common anti-pattern.
 3. **Testing:** Verify edge cases: Interactive, Piped (`|`), Redirected (`<`), and Non-interactive modes.
+> **Reference:** Bug Fix Protocol are defined in [`.cursor/rules/rules.mdc`](../.cursor/rules/rules.mdc).
 
 # v0.1 - MVP Release ✅
 
@@ -135,31 +109,92 @@
 
 ---
 
-# v0.3.1 - Code Block Navigation & Chat Enhancements
+
+# v0.3.1 - TUI Refactor & Code Block Removal ✅
+
+**Status:** Completed
+
+**Features:**
+
+### TUI Refactoring
+- [x] Replace `msg.String()` key comparisons with `key.Matches()` using centralized `KeyMap` structs
+- [x] Decompose monolithic `Update` function into state-specific handlers (`updateKeyMsgReviewing`, `updateKeyMsgChatting`, etc.)
+- [x] Decompose monolithic `View` function into state-specific renderers (`viewLoading`, `viewMain`, `viewError`)
+- [x] Centralize yank chord state reset logic
+
+### Code Block Feature Removal
+- [x] Remove code block navigation (`[`, `]`) and `yb` yank functionality (deferred to v0.6)
+- [x] Update all documentation to reflect removal
+- [x] Add in-code comments explaining rationale for removal
+- [x] `yy` now yanks entire review + chat history (no code-block navigation)
+- [x] `Y` yanks only the last assistant response
+
+### Documentation Updates
+- [x] Update Coding Styles with TUI key-handling and feature-removal guidelines
+- [x] Update help text and footer to remove code block references
+- [x] Refactor `CalculateViewportHeight` to derive search/chat state from `State` enum instead of redundant boolean parameters
+- [x] Add error logging for markdown rendering fallbacks to maintain visibility during development
+
+---
+
+
+# v0.3.2 - Context & Intent
+
+**Status**: Raw ideas, need to review and discuss
+
+## Features
+
+#### 🎯 Intent-Driven Review (New "Prompt First")
+
+- [ ] **Pre-Review Form (`huh`):** Before scanning, ask:
+    - Custom instruction (e.g., "Focus on error handling").
+    - Select Focus Areas (Security, Perf, Logic).
+- [ ] **Smart Context:** If the user asks for "Security," automatically inject the `security` preset rules into the system prompt.
+
+#### 🧠 Context Pruning (Dynamic Ignore)
+
+- [ ] **"Summarize & Prune" Action:** In the TUI, pressing `i` on a file/block:
+    1. Uses a cheap model (Gemini Flash) to summarize the code block (e.g., `// func processData: handles standard CSV parsing`).
+    2. Replaces the actual code in the context window with this summary.
+    3. **Benefit:** Saves massive tokens for the _next_ turn of chat while keeping the "map" of the code.
+- [ ] **Negative Prompting:** "Ignore from System" adds a negative constraint to the session config (e.g., "User explicitly stated they don't care about variable names").
+
+### Reviews Interaction
+- [ ] System prompt will make sure when review, the content will be break into reviews, for example:
+  - [ ] Can navigate and interactive with reviews:
+  - [ ] Can "Ignore from context" --> Condense the review and add to current context ignore section
+  - [ ] Can 'Ignore from system prompt' --> Add to system prompt ignore section
+  - [ ] Can 'Ignore from preset' --> Add to a preset's ignore section
+
+---
+
+
+## Notes
+**Integrating new libraries**: 
+
+| **Feature**           | **Library**                  | **Implementation Concept**                                                                                                                                                  |
+| --------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Pre-Flight Form**   | `charmbracelet/huh`          | Run this in `root.PreRunE`. If `!NonInteractive`, launching a `huh.NewForm` blocks execution until the user picks a focus (Security/Performance) or types a custom intent.  |
+| **Review Navigation** | `charmbracelet/bubbles/list` | Since we need to treat reviews as items, switch from a simple viewport to a `bubbles/list`. Each item in the list is a struct `{Title, Severity, File, Line, Explanation}`. |
+| **Data Filtering**    | `samber/lo`                  | `reviews = lo.Filter(reviews, func(r Review, _ int) bool { return !config.IsIgnored(r.RuleID) })`. Much cleaner than `for` loops.                                           |
+
+# v0.3.3 - Chat Enhancements
 
 **Status:** Planned
 
 **Features:**
 
-### Code Block Highlighting & Navigation (In Testing)
-- [ ] Code block detection in review/chat responses
-- [ ] Visual highlighting with purple border
-- [ ] Navigate with `[` / `]` keys
-- [ ] Contextual hints and block indicators
-- [ ] `yb` yanks highlighted block
+#### 🛠️ Refactoring & Optimization
+- [ ] **`samber/lo` Integration:** Refactor slice logic in `diff` and `review` packages.
 
 ### Chat/Request Management (In Testing)
 - [ ] `Ctrl+X` cancels streaming requests
 - [ ] Prompt history navigation (`Ctrl+P`/`Ctrl+N`)
 - [ ] Request cancellation feedback
 
-### Refactor
-- [ ] Refactor hardcoded values to constants
 
-### Prompt First
-- Prompt first before start the conversation (optional)
-
----
+# v0.3.4 - Extend reading
+- Able to read all project for context, then combine with git diff 
 
 # v0.4 - Panes & Export (Lazy-git Style)
 
@@ -169,11 +204,6 @@
 
 ### Setting Management
 - [ ] Can change default setting (new subcommand)
-
-### Code Block Navigation
-- [ ] `[` / `]` - Navigate to previous/next code block
-- [ ] Code block index indicator (e.g., "Block 2/5")
-- [ ] Jump to specific block with number prefix (e.g., `2]` jumps to block 2)
 
 ### Panes Management Mode
 - [ ] Multi-pane layout inspired by lazy-git/lazy-docker
@@ -209,14 +239,6 @@
 
 **Features:**
 
-### Code Block Folding
-- [ ] `zc` - Fold/collapse current code block
-- [ ] `zo` - Unfold/expand current code block
-- [ ] `za` - Toggle fold state
-- [ ] `zM` - Fold all code blocks
-- [ ] `zR` - Unfold all code blocks
-- [ ] Collapsed indicator showing language and line count
-
 ### Token Rotation
 - [ ] Support multiple API keys
 - [ ] Round-robin rotation between keys
@@ -232,6 +254,29 @@
 - [ ] `--dry-run` / `-n` - Preview payload without API call
 - [ ] `--list-models` - Show available models
 - [ ] Token cost estimation
+
+# v0.6 - Code Block Management (Deferred)
+
+**Status:** Deferred
+
+**Features:**
+
+### Code Block Highlighting & Navigation
+- [ ] Code block detection in review/chat responses
+- [ ] Visual highlighting with purple border
+- [ ] Navigate with `[` / `]` keys
+- [ ] Contextual hints and block indicators
+- [ ] `yb` yanks highlighted block
+- [ ] Code block index indicator (e.g., "Block 2/5")
+- [ ] Jump to specific block with number prefix (e.g., `2]` jumps to block 2)
+
+### Code Block Folding
+- [ ] `zc` - Fold/collapse current code block
+- [ ] `zo` - Unfold/expand current code block
+- [ ] `za` - Toggle fold state
+- [ ] `zM` - Fold all code blocks
+- [ ] `zR` - Unfold all code blocks
+- [ ] Collapsed indicator showing language and line count
 
 ---
 
@@ -318,7 +363,7 @@
 | Navigation issues after reviews                                           | Fixed  | No longer auto-scrolls to bottom; users read from top                                                                                                                            |                                         |
 | Redundant spaces below terminal                                           | Fixed  | Dynamic viewport height calculation based on UI state                                                                                                                            |                                         |
 | Yank only copies initial review                                           | Fixed  | Now yanks full content including chat history                                                                                                                                    |                                         |
-| Yank code block limited                                                   | Open   | Always yanks the **last** code block; no way to select specific block (requires Code Block Highlighting feature)                                                                 |                                         |
+| Code block navigation removed                                             | Fixed    | Code block navigation (`[`, `]`, `yb`) removed in v0.3.1; deferred to v0.6 for complexity/UX reasons                                                                          |                                         |
 | Panic when using --interactive flag                                       | Fixed  | Added nil checks for renderer fallback                                                                                                                                           |                                         |
 | Can't type `?` in chat mode                                               | Fixed  | `?` now only triggers help in reviewing mode, passes through in chat                                                                                                             |                                         |
 | Can't press Enter for newline in chat                                     | Fixed  | Changed to `Alt+Enter` to send; Enter creates newlines                                                                                                                           |                                         |
@@ -338,6 +383,18 @@
 | IS10: Not enter default value when editing                                | Fixed  | Improved default value prompts with clearer instructions and explicit current value display.                                                                                     |                                         |
 | IS11: Can not move cursor up and down when edit prompt                    | Fixed  | Replaced line-by-line stdin input with external editor (`$EDITOR` or `vi` fallback) for multiline prompt editing.                                                                |                                         |
 | IS12: Preset files when saved got `\n` instead of breaks                  | Fixed  | Added custom `MarshalYAML()` method to `Preset` struct to use literal block scalars (`                                                                                           | `) for multiline prompts in YAML files. |
+| Manual layout calculation in help overlay                                | Fixed  | Replaced manual padding calculation with `lipgloss.Place()` for proper centering.                                                                                                |
+| Swallowed renderer initialization error                                  | Fixed  | Added error logging to `os.Stderr` before fallback to maintain visibility during development.                                                                                    |
+| Inconsistent method receivers in Model                                   | Fixed  | Converted all state-mutating methods from value receivers to pointer receivers for consistency and correctness.                                                                 |
+| Stringly-typed message fields                                            | Fixed  | Added typed constants (`YankTypeReview`, `YankTypeLastResponse`, `ChatRoleUser`, `ChatRoleAssistant`) to replace raw string literals.                                           |
+| Incomplete review request: core logic missing                            | Fixed  | Process issue: missing new files in diff. TUI refactor files (`update.go`, `view.go`) now included. Core logic properly decomposed.                                                |
+| Inconsistent pointer receiver usage in constructor                      | Fixed  | Changed `NewModel` to return `*Model` instead of `Model`. Aligns with idiomatic Go for mutable types and prevents accidental copies.                                             |
+| Stringly-typed enum (ChatRole, YankType)                                | Fixed  | Replaced string constants with typed enums (`type ChatRole int`, `type YankType int`). Enables compile-time type safety and prevents invalid assignments.                      |
+| Monolithic Model file                                                    | Fixed  | Split `startReview` into `model_review.go`, viewport helpers into `viewport.go`. `model.go` now focused on struct definition and constructor only.                            |
+| Incorrect integer-to-string conversion in RenderSecretWarning            | Fixed  | Replaced `string(rune(s.Line + '0'))` with `strconv.Itoa(s.Line)`. Also replaced custom `itoa()` function with `strconv.Itoa()`. Never use rune arithmetic for numeric formatting. |
+| Direct stdout writes in RunSimple                                       | Fixed  | Refactored `RunSimple` to accept `io.Writer` parameter. Enables testing and output redirection. Library functions should accept `io.Writer`, only CLI commands bind to `os.Stdout`. |
+| Unused Content field in YankMsg                                         | Fixed  | Removed `Content` field from `YankMsg`, now intent-only with `Type` field. Message buses should pass intents, not duplicate large content already in model state. |
+| Magic number in RenderLoadingDots modulo                                | Fixed  | Replaced `dots[tick%4]` with `dots[tick%len(dots)]`. Never hardcode slice lengths in modulo/indexing operations. |
 
 ---
 
