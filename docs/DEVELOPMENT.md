@@ -170,22 +170,13 @@ Automatically loads rules from the `.cursor/rules/` directory. The `rules.mdc` f
 
 
 ## Notes
-**New Libraries**: 
-1. **`charmbracelet/huh`** (Form/Input)
-    - **Use for:** The "Prompt First" feature.
-    - **Why:** It’s a newer library from Charm (Bubbletea creators). It builds accessible, beautiful forms (selects, text inputs, confirms) with zero boilerplate. 
-    - **UX Win:** A clean, modal-like form pops up before the heavy AI lifting starts.
-2. **`samber/lo`** (Utility)
-    - **Use for:** "Refactor" phase.
-    - **Why:** It's a Lodash-style library for Go using Generics. It makes slice/map manipulation (filtering reviews, mapping ignored files) incredibly concise and readable.
-    - **Example:** `lo.Filter(reviews, func(x, _ int) bool { return !x.Ignored })`
-	
+**Integrating new libraries**: 
 
-|**Feature**|**Library**|**Implementation Concept**|
-|---|---|---|
-|**Pre-Flight Form**|`charmbracelet/huh`|Run this in `root.PreRunE`. If `!NonInteractive`, launching a `huh.NewForm` blocks execution until the user picks a focus (Security/Performance) or types a custom intent.|
-|**Review Navigation**|`charmbracelet/bubbles/list`|Since we need to treat reviews as items, switch from a simple viewport to a `bubbles/list`. Each item in the list is a struct `{Title, Severity, File, Line, Explanation}`.|
-|**Data Filtering**|`samber/lo`|`reviews = lo.Filter(reviews, func(r Review, _ int) bool { return !config.IsIgnored(r.RuleID) })`. Much cleaner than `for` loops.|
+| **Feature**           | **Library**                  | **Implementation Concept**                                                                                                                                                  |
+| --------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Pre-Flight Form**   | `charmbracelet/huh`          | Run this in `root.PreRunE`. If `!NonInteractive`, launching a `huh.NewForm` blocks execution until the user picks a focus (Security/Performance) or types a custom intent.  |
+| **Review Navigation** | `charmbracelet/bubbles/list` | Since we need to treat reviews as items, switch from a simple viewport to a `bubbles/list`. Each item in the list is a struct `{Title, Severity, File, Line, Explanation}`. |
+| **Data Filtering**    | `samber/lo`                  | `reviews = lo.Filter(reviews, func(r Review, _ int) bool { return !config.IsIgnored(r.RuleID) })`. Much cleaner than `for` loops.                                           |
 
 # v0.3.3 - Chat Enhancements
 
