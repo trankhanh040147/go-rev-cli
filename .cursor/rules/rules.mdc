@@ -1,72 +1,81 @@
 ---
 alwaysApply: true
 ---
-
 # revcli - Language Learning CLI Tool
 
 ## Project Context
-- CLI: Go, Cobra, Bubbletea TUI, Vim navigation
-- Config: `~/.config/revcli/config.yaml`
+- **Core:** Go (1.25+), Cobra (CLI)
+- **TUI Stack:**
+  - `bubbletea` (Elm architecture)
+  - `lipgloss` (Styling & Layout)
+  - `bubbles` (Components: list, textinput, viewport)
+  - `huh` (Forms & Inputs)
+  - `glamour` (Markdown rendering)
+- **Utilities:**
+  - `samber/lo` (Lodash-style generics)
+  - `bytedance/sonic` (JSON)
+- **Config:** `~/.config/revcli/config.yaml`
 
-## Coding Principle
-### 1. UX & Interface Design
+## Coding Principles
+
+### 1. Innovation & Tech Adoption
+- **Adopt Aggressively:** Actively introduce new technologies that reduce boilerplate or improve UX.
+- **Library vs. Custom:** If a library (`lo`, `huh`) solves a problem better than custom code, delete the custom code.
+- **UX over UI:** Prioritize flow and speed (keyboard-first) over purely visual flair.
+
+### 2. UX & Interface Design
+- **Forms (`huh`):** Use `huh.NewForm` for multi-field inputs (wizards, settings). Avoid manual state management.
+- **Components (`bubbles`):** Prefer standard `bubbles` components. Wrap them, don't rewrite them.
+- **Styling (`lipgloss`):**
+  - Use `lipgloss.Place()` for alignment.
+  - **Never** use `strings.Repeat` for padding/borders.
+  - Center via style width; never calculate string lengths manually.
 - **Vim Navigation:** Use `j/k`, `g/G`, `/`. Update `internal/ui/help.go` immediately if shortcuts change.
-- **Input Strategy:** Keyboard-first actions. Minimize typing via AI, defaults, and interactive editing. Prefer TUI/modals over long flags.
-- **Layout:** Center via style width only; **never** calculate string length.
-- **Layout Centering:** Use `lipgloss.Place()` for centering content. Never manually calculate padding with `strings.Repeat`. Never use `strings.Repeat` for layout - use `lipgloss` border styles or width constraints instead.
-- **Keybindings:** Map `Enter`/`Tab` to `save() + nextField()`. Tab must work in both editing and navigation modes. Show help with `?`. Define help text in `constants` (never inline).
-- **Key Handling:** Use `key.Matches(msg, m.keys.Binding)` with keymap structs. Never hardcode key strings or use `msg.String()`. All Bubbletea key comparisons MUST use `key.Matches()` with centralized `KeyMap` structs. Legacy string comparisons are forbidden.
-- **TUI Structure:** Decompose large `Update`/`View` functions (>15 complexity) into state-specific helpers (`updateKeyMsgReviewing`, `viewMain`, etc.). Keep main dispatcher minimal.
-- **State Derivation:** Helper functions that accept a `State` enum must not take redundant boolean flags derivable from that state. Derive booleans inside the helper (e.g., `isSearching := state == StateSearching`) to avoid inconsistent arguments and verbose call sites.
-- **Feature Removal:** When removing user-visible features, update docs and add brief in-code comments explaining rationale (e.g., "removed in v0.3.1").
-- **CRUD Logic:** `isEditMode` relies strictly on ID persistence (non-nil), not content.
+- **Keybindings Strategy:**
+  - Map `Enter`/`Tab` to `save() + nextField()`.
+  - `Tab` navigation must work in both editing and navigation modes.
+  - Show help with `?`. Define help text in `constants` (never inline).
+- **Key Handling:** Use `key.Matches()` with centralized `KeyMap` structs. **Never** use `msg.String()`.
+- **TUI Structure:** Decompose `Update`/`View` >15 complexity into helpers. Derive boolean flags inside helpers.
+- **CRUD State:** `isEditMode` depends on **persistence** (e.g., non-nil ID), not content presence. Treat pre-filled new entities as `Create`.
 
-### 2. Core Go Implementation
-- **Structure:** Go 1.25+. Keep files/modules small. Constants in `[...constants.go]` (no hardcoding).
-- **File Size:** Manage code files into small parts to reduce token costs. Split large files, keep functions focused, prefer smaller modules
-- **Constructors:** For mutable/stateful types, constructors MUST return pointers (`func NewType(...) *Type`). Prevents accidental copies and clarifies intended usage.
-- **Type Safety:** Use typed enums (`type Role int`) instead of stringly-typed constants for role/type fields. Prevents invalid assignments and enables compile-time checks.
-- **Numeric Formatting:** Use `strconv.Itoa()` or `fmt.Sprintf()` for int-to-string conversion. Never use rune arithmetic (`+'0'`, `rune(n)`) for numeric formatting.
-- **Slice Indexing:** Use `len(slice)` for modulo/indexing operations. Never hardcode slice lengths in modulo expressions (e.g., `%4`).
-- **Input Safety:** Single `bufio.NewReader(os.Stdin)` per function (never multiple). Trim input strings. Never use `fmt.Scanln` for user input; use `bufio.NewReader(os.Stdin).ReadString('\n')` and trim.
-- **Concurrency:** Use `errgroup.Group` (not `sync.WaitGroup`). Propagate errors. Handle context cancellation.
-- **Memory:** **Never** take address of map index (`&m[k]`). Assign to var first.
-* **Index Safety:** Verify bounds (`0 ≤ idx < len`) before access; explicitly handle empty slices (reset index to -1 or skip).
-* **Safe Mutation:** Cache original IDs/Keys **before** editing; execute deletions against the cached values, never against modified properties.
+### 3. Core Go Implementation & Structure
+- **File Size (CRITICAL):** Manage code files into small parts to reduce token costs. Split large files, keep functions focused, prefer smaller modules.
+- **Structure:** Keep files/modules small and focused. Constants in `[...constants.go]` (no hardcoding).
+- **Functional Helpers (`lo`):**
+  - **Strictly** use `samber/lo` for slice/map filtering, mapping, and finding.
+  - **Ban** `for` loops for simple data transformation.
+- **Index Safety:** Verify bounds (`0 ≤ idx < len`) before access; explicitly handle empty slices (reset index to -1 or skip).
+- **Safe Mutation:** Cache original IDs/Keys **before** editing; execute deletions against the cached values, never against modified properties.
+- **JSON:** Use `bytedance/sonic` for all marshalling. **Ban** `encoding/json`.
+- **Concurrency:** Use `errgroup.Group` (propagates errors) over `sync.WaitGroup`.
+- **Input Safety:** Single `bufio.NewReader`. **Ban** `fmt.Scanln`. Use `reader.ReadString`.
 - **Flow:** Use `Cobra.RunE`. Return errors to `main`. **No** `os.Exit` in library code. Listen for `os.Interrupt`.
-- **Timeouts:** Mandatory default timeouts for all Network/IO.
-- **TUI I/O:** All file I/O in TUI Update functions must be wrapped in `tea.Cmd` to prevent blocking the event loop.
-- **JSON Library:** Use `github.com/bytedance/sonic` for all JSON operations (performance). Never use `encoding/json` for marshal/unmarshal.
-- **Slice Allocation:** Pre-allocate slice capacity when size is known: `make([]T, 0, len(source))` instead of `[]T{}`.
-- **Message Buses:** Pass intent-only messages (typed enums/flags). Avoid sending large content payloads that already exist in model state.
+- **Constructors:** Return pointers (`func NewType(...) *Type`) for stateful types.
+- **Memory Safety:** **Never** address map index directly. Pre-allocate slices.
+- **TUI I/O:** Wrap file I/O in `tea.Cmd` to prevent blocking the UI.
 
-### 3. System & Configuration
-- **Config:** YAML in `~/.config/revcli/config.yaml` (use `os.MkdirAll`). Set defaults.
+### 4. System & Configuration
+- **Config:** YAML in `~/.config/revcli/config.yaml`. Use `os.MkdirAll`. Set defaults.
 - **Platform:** Use `runtime.GOOS` for generic commands (open/explorer) and `$EDITOR`.
 - **Streams:** Output → `os.Stdout`. Logs/Errors → `os.Stderr`.
-- **Output Abstraction:** Library/non-interactive flows should accept `io.Writer` parameter. Only top-level CLI commands bind directly to `os.Stdout`.
-- **TTY:** Check `isatty(stdout)`. Disable colors/spinners if piping or `NO_COLOR` set.
-- **Flags:** Unique short aliases per command. No redefinition in `init()`. Verify before adding.
-- **CRUD State:** `isEditMode` depends on **persistence** (e.g., non-nil ID), not content presence. Treat pre-filled new entities as `Create`.
-- **Navigation:** Map `Enter`/`Tab` to `save() + nextField()`. Tab navigation must work when not editing. Rely on static field indices.
+- **TTY:** Check `isatty(stdout)`. Disable colors if `NO_COLOR` or piping.
+- **Flags:** Unique short aliases. Do not redefine in `init()`.
 - **Multi-item Processing:** Reload shared state (e.g., library) at start of each iteration to ensure fresh state for each item.
-- **Layout:** Center elements via style width; **never** calculate width from string length.
-- **Help Text:** Centralize keybinding docs in `constants` (e.g., `HelpText`), never hardcode inline.
 - **Width Safety:** Guard `strings.Repeat` with `max(0, count)`. Guard width calculations to prevent negative values. Default to minimum width (80) if `Width() == 0` before first `WindowSizeMsg`.
-    
-### 4. Quality & Maintenance
-- **[CRITICAL] DRY Enforcement:** Flag **any** repeated code patterns (data manipulation, error handling sequences, or TUI styling) appearing >2 times. These MUST be extracted into helper functions to reduce verbosity.
-- **Standards:** Target A+ Report Card. Complexity ≤15. Run `gofmt -s`, `vet`, `staticcheck`, `misspell`.
-- **Errors:** Wrap all errors: `fmt.Errorf("ctx: %w", err)`. Log errors before fallback handlers to make issues visible during development.
-- **Method Receivers:** Methods that mutate receiver state or call mutating methods MUST use pointer receivers `(m *Type)`
-- **Error Logging:** Errors in fallback handlers MUST be logged to `os.Stderr` before fallback to maintain visibility during development.
-- **Deps:** Pin majors. Update periodically (`go get -u`). Run `govulncheck`.
+
+### 5. Quality & Maintenance
+- **[CRITICAL] DRY Enforcement:** Flag repeated logic >2 times. Extract to helpers or use `samber/lo`.
+- **Error Handling:** Wrap errors: `fmt.Errorf("ctx: %w", err)`. Log before fallback.
+- **Method Receivers:** Mutating methods MUST use pointer receivers `(m *Type)`.
+- **Standards:** Complexity ≤15. Run `gofmt -s`, `staticcheck`.
 
 ## Bug Fix Protocol
-1. **Global Fix:** Search (`rg`/`fd`) for similar patterns, fix **all** occurrences
-2. **Documentation:** Update "Known Bugs" in `docs/DEVELOPMENT.md`, update "Coding Styles" if anti-pattern
-3. **Testing:** Verify Interactive, Piped (`|`), Redirected (`<`), Non-interactive modes
-4. **Diff Completeness:** Include all new/modified files in diffs for complete review. Missing core logic files blocks critical checks.
+1. **Global Fix:** Search (`rg`/`fd`) codebase for similar patterns. Fix **all** occurrences.
+2. **Docs:** Update "Known Bugs" in `docs/DEVELOPMENT.md`.
+3. **Verify:** Test Interactive, Piped (`|`), and Non-interactive modes.
+4. **Diff:** Include all new/modified files in diffs.
 
 ## Code Style
-- Concise bullets over paragraphs, remove fluff, preserve meaning, clear actionable code
+- Informal, concise, bullet-points. No fluff.
+- Prioritize logic clarity and modern Go idioms.

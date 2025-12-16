@@ -136,8 +136,6 @@ Automatically loads rules from the `.cursor/rules/` directory. The `rules.mdc` f
 - [x] Add error logging for markdown rendering fallbacks to maintain visibility during development
 
 ---
-
-
 # v0.3.2 - Context & Intent
 
 **Status**: Raw ideas, need to review and discuss
@@ -159,24 +157,12 @@ Automatically loads rules from the `.cursor/rules/` directory. The `rules.mdc` f
     3. **Benefit:** Saves massive tokens for the _next_ turn of chat while keeping the "map" of the code.
 - [ ] **Negative Prompting:** "Ignore from System" adds a negative constraint to the session config (e.g., "User explicitly stated they don't care about variable names").
 
-### Reviews Interaction
-- [ ] System prompt will make sure when review, the content will be break into reviews, for example:
-  - [ ] Can navigate and interactive with reviews:
-  - [ ] Can "Ignore from context" --> Condense the review and add to current context ignore section
-  - [ ] Can 'Ignore from system prompt' --> Add to system prompt ignore section
-  - [ ] Can 'Ignore from preset' --> Add to a preset's ignore section
-
----
-
-
-## Notes
-**Integrating new libraries**: 
+### Integrating new libs
 
 | **Feature**           | **Library**                  | **Implementation Concept**                                                                                                                                                  |
 | --------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Pre-Flight Form**   | `charmbracelet/huh`          | Run this in `root.PreRunE`. If `!NonInteractive`, launching a `huh.NewForm` blocks execution until the user picks a focus (Security/Performance) or types a custom intent.  |
 | **Review Navigation** | `charmbracelet/bubbles/list` | Since we need to treat reviews as items, switch from a simple viewport to a `bubbles/list`. Each item in the list is a struct `{Title, Severity, File, Line, Explanation}`. |
-| **Data Filtering**    | `samber/lo`                  | `reviews = lo.Filter(reviews, func(r Review, _ int) bool { return !config.IsIgnored(r.RuleID) })`. Much cleaner than `for` loops.                                           |
 
 # v0.3.3 - Chat Enhancements
 
@@ -184,8 +170,13 @@ Automatically loads rules from the `.cursor/rules/` directory. The `rules.mdc` f
 
 **Features:**
 
-#### 🛠️ Refactoring & Optimization
+### Integrating new libs
 - [ ] **`samber/lo` Integration:** Refactor slice logic in `diff` and `review` packages.
+
+| **Feature**        | **Library** | **Implementation Concept**                                                                                                        |
+| ------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Data Filtering** | `samber/lo` | `reviews = lo.Filter(reviews, func(r Review, _ int) bool { return !config.IsIgnored(r.RuleID) })`. Much cleaner than `for` loops. |
+|                    |             |                                                                                                                                   |
 
 ### Chat/Request Management (In Testing)
 - [ ] `Ctrl+X` cancels streaming requests
