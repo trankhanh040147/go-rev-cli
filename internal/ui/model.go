@@ -99,6 +99,7 @@ func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, p *pre
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED"))
 
+	// todo: check cannot type on this text area
 	// Create textarea for chat input
 	ta := textarea.New()
 	ta.Placeholder = "Ask a follow-up question..."

@@ -54,6 +54,7 @@ type KeyMap struct {
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
 		// Global
+		// todo: check error q not quit
 		Quit: key.NewBinding(
 			key.WithKeys("q"),
 			key.WithHelp("q", "quit"),

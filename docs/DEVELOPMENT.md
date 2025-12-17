@@ -182,6 +182,18 @@ Automatically loads rules from the `.cursor/rules/` directory. The `rules.mdc` f
 - `internal/ui/update_reviewing.go` - Added `i` keybinding to enter file list mode
 - `internal/ui/view_model.go` - Added `viewFileList()` renderer
 
+### Issues Found
+- [ ] IS01: Cannot ask follow-ups questions --> can not type 
+- [ ] IS02: Can not quit (`q`) after get streaming error
+```bash
+🔍 Go Code Review
+
+✗ stream error: blocked: candidate: FinishReasonSafety
+
+q: quit
+```
+- [ ]
+
 # v0.3.3 - Chat Enhancements
 
 **Status:** Planned
