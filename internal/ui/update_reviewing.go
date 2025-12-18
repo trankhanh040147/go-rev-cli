@@ -3,9 +3,9 @@ package ui
 import (
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // handleYank handles yank commands and returns (model, cmd, handled)
@@ -15,7 +15,7 @@ func (m *Model) handleYank(msg tea.KeyMsg) (*Model, tea.Cmd, bool) {
 		if m.state == StateReviewing && !m.lastKeyWasY {
 			// First 'y' press - wait to see if followed by another 'y' (yy)
 			m.lastKeyWasY = true
-			return m, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
+			return m, tea.Tick(YankChordTimeout, func(t time.Time) tea.Msg {
 				return yankTimeoutMsg{}
 			}), true
 		} else if m.lastKeyWasY {
@@ -92,14 +92,17 @@ func (m *Model) updateKeyMsgReviewing(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.keys.Quit), key.Matches(msg, m.keys.ForceQuit):
-		m.cancel()
+		if m.activeCancel != nil {
+			m.activeCancel()
+			m.activeCancel = nil
+		}
 		return m, tea.Quit
 	case key.Matches(msg, m.keys.Search):
 		m.previousState = m.state
 		m.state = StateSearching
 		m.searchInput.SetValue(m.search.Query)
 		m.searchInput.Focus()
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
+		m.updateViewportHeight()
 		return m, textinput.Blink
 	case key.Matches(msg, m.keys.Help):
 		m.previousState = m.state
@@ -108,7 +111,7 @@ func (m *Model) updateKeyMsgReviewing(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.EnterChat):
 		m.state = StateChatting
 		m.textarea.Focus()
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
+		m.updateViewportHeight()
 		return m, nil
 	case key.Matches(msg, m.keys.FileList):
 		m.previousState = m.state
@@ -129,4 +132,3 @@ func (m *Model) updateKeyMsgReviewing(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	}
 	return m, nil
 }
-

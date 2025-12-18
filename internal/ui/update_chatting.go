@@ -3,23 +3,43 @@ package ui
 import (
 	"context"
 	"strings"
-	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
 )
+
+// navigatePromptHistory navigates through prompt history in the given direction
+func (m *Model) navigatePromptHistory(direction int) {
+	if m.streaming {
+		return
+	}
+	if direction < 0 && len(m.promptHistory) == 0 {
+		return
+	}
+	_, newIndex, promptText := NavigatePromptHistory(m.promptHistory, m.promptHistoryIndex, direction)
+	m.promptHistoryIndex = newIndex
+	if promptText != "" {
+		m.textarea.SetValue(promptText)
+		m.textarea.CursorEnd()
+	} else if direction > 0 {
+		m.textarea.SetValue("")
+	}
+}
 
 // updateKeyMsgChatting handles key messages in chatting mode
 func (m *Model) updateKeyMsgChatting(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Quit), key.Matches(msg, m.keys.ForceQuit):
 		if m.textarea.Value() == "" {
-			m.cancel()
+			if m.activeCancel != nil {
+				m.activeCancel()
+				m.activeCancel = nil
+			}
 			return m, tea.Quit
 		}
 	case key.Matches(msg, m.keys.ExitChat):
 		m.state = StateReviewing
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
+		m.updateViewportHeight()
 		return m, nil
 	case key.Matches(msg, m.keys.SendMessage):
 		if !m.streaming {
@@ -30,39 +50,35 @@ func (m *Model) updateKeyMsgChatting(msg tea.KeyMsg) (*Model, tea.Cmd) {
 				m.textarea.Reset()
 				m.streaming = true
 				m.chatHistory = append(m.chatHistory, ChatMessage{Role: ChatRoleUser, Content: question})
-				return m, SendChatMessage(m.ctx, m.client, question)
+				// Create new context for this command
+				ctx, cancel := context.WithCancel(m.rootCtx)
+				m.activeCancel = cancel
+				return m, SendChatMessage(ctx, m.client, question)
 			}
 		}
 	case key.Matches(msg, m.keys.PrevPrompt):
-		if !m.streaming && len(m.promptHistory) > 0 {
-			_, newIndex, promptText := NavigatePromptHistory(m.promptHistory, m.promptHistoryIndex, -1)
-			m.promptHistoryIndex = newIndex
-			if promptText != "" {
-				m.textarea.SetValue(promptText)
-				m.textarea.CursorEnd()
-			}
-		}
+		m.navigatePromptHistory(-1)
 	case key.Matches(msg, m.keys.NextPrompt):
-		if !m.streaming {
-			_, newIndex, promptText := NavigatePromptHistory(m.promptHistory, m.promptHistoryIndex, 1)
-			m.promptHistoryIndex = newIndex
-			if promptText != "" {
-				m.textarea.SetValue(promptText)
-				m.textarea.CursorEnd()
-			} else {
-				m.textarea.SetValue("")
-			}
-		}
+		m.navigatePromptHistory(1)
 	case key.Matches(msg, m.keys.CancelRequest):
 		if m.streaming {
-			m.cancel()
+			if m.activeCancel != nil {
+				m.activeCancel()
+				m.activeCancel = nil
+			}
 			m.streaming = false
-			m.ctx, m.cancel = context.WithCancel(context.Background())
 			m.yankFeedback = "Request cancelled"
-			m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-			return m, ClearYankFeedbackCmd(2 * time.Second)
+			m.updateViewportHeight()
+			return m, ClearYankFeedbackCmd(YankFeedbackDuration)
 		}
+	default:
+		// Pass through typing keys to textarea when not streaming
+		if !m.streaming {
+			var cmd tea.Cmd
+			m.textarea, cmd = m.textarea.Update(msg)
+			return m, cmd
+		}
+		return m, nil
 	}
 	return m, nil
 }
-

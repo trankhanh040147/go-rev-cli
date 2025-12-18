@@ -32,8 +32,11 @@ func (m *Model) startReview() tea.Cmd {
 		)
 	}
 
+	// Create new context for this command
+	ctx, cancel := context.WithCancel(m.rootCtx)
+	m.activeCancel = cancel
 	// Return command that starts streaming in goroutine
-	return streamReviewCmd(m.ctx, m.client, userPrompt)
+	return streamReviewCmd(ctx, m.client, userPrompt)
 }
 
 // streamReviewCmd creates a command that streams the review response

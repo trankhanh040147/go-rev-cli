@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -13,39 +12,50 @@ import (
 // returnToPreviousState returns to the previous state and updates viewport height
 func (m *Model) returnToPreviousState() {
 	m.state = m.previousState
-	m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
+	m.updateViewportHeight()
 }
 
-// updateNonKeyMsg handles non-key messages
-func (m *Model) updateNonKeyMsg(msg tea.Msg) (*Model, tea.Cmd) {
-	var cmds []tea.Cmd
+// handleChatCompletion handles chat response completion (success or error)
+func (m *Model) handleChatCompletion(content string, isError bool) {
+	m.streaming = false
+	m.chatHistory = append(m.chatHistory, ChatMessage{Role: ChatRoleAssistant, Content: content})
+	m.textarea.Focus() // Ensure textarea remains focused after response/error
+	m.updateViewportAndScroll()
+}
 
+// handleWindowSize handles window resize messages
+func (m *Model) handleWindowSize(msg tea.WindowSizeMsg) {
+	m.width = msg.Width
+	m.height = msg.Height
+
+	m.updateViewportHeight()
+	if !m.ready {
+		m.viewport = viewport.New(msg.Width, m.viewport.Height)
+		m.viewport.Style = lipgloss.NewStyle().Padding(0, 2)
+		m.ready = true
+	} else {
+		m.viewport.Width = msg.Width
+	}
+	m.textarea.SetWidth(msg.Width - 4)
+	// Update file list dimensions
+	m.fileList.SetWidth(msg.Width - 4)
+	m.fileList.SetHeight(msg.Height - 4)
+}
+
+// handleSpinnerTick handles spinner animation tick messages
+func (m *Model) handleSpinnerTick(msg spinner.TickMsg) tea.Cmd {
+	if m.state == StateLoading || m.streaming {
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return cmd
+	}
+	return nil
+}
+
+// handleStreamMessages handles streaming-related messages
+// Returns (model, cmd, shouldReturnEarly)
+func (m *Model) handleStreamMessages(msg tea.Msg) (*Model, tea.Cmd, bool) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-
-		viewportHeight := CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-		if !m.ready {
-			m.viewport = viewport.New(msg.Width, viewportHeight)
-			m.viewport.Style = lipgloss.NewStyle().Padding(0, 2)
-			m.ready = true
-		} else {
-			m.viewport.Width = msg.Width
-			m.viewport.Height = viewportHeight
-		}
-		m.textarea.SetWidth(msg.Width - 4)
-		// Update file list dimensions
-		m.fileList.SetWidth(msg.Width - 4)
-		m.fileList.SetHeight(msg.Height - 4)
-
-	case spinner.TickMsg:
-		if m.state == StateLoading || m.streaming {
-			var cmd tea.Cmd
-			m.spinner, cmd = m.spinner.Update(msg)
-			cmds = append(cmds, cmd)
-		}
-
 	case StreamStartMsg:
 		// Start streaming: store channels and begin listening
 		m.streaming = true
@@ -58,7 +68,7 @@ func (m *Model) updateNonKeyMsg(msg tea.Msg) (*Model, tea.Cmd) {
 			streamChunkCmd(m.streamChunkChan),
 			streamErrorCmd(m.streamErrChan),
 			streamDoneCmd(m.streamDoneChan),
-		)
+		), true
 
 	case StreamChunkMsg:
 		// Append chunk to response and update viewport incrementally
@@ -69,7 +79,7 @@ func (m *Model) updateNonKeyMsg(msg tea.Msg) (*Model, tea.Cmd) {
 			streamChunkCmd(m.streamChunkChan),
 			streamErrorCmd(m.streamErrChan),
 			streamDoneCmd(m.streamDoneChan),
-		)
+		), true
 
 	case StreamDoneMsg:
 		// Streaming complete: set final response and transition to reviewing state
@@ -80,12 +90,23 @@ func (m *Model) updateNonKeyMsg(msg tea.Msg) (*Model, tea.Cmd) {
 		m.streamChunkChan = nil
 		m.streamErrChan = nil
 		m.streamDoneChan = nil
+		// Clear active cancel (command completed)
+		m.activeCancel = nil
 		m.updateViewport()
+		return m, nil, false
+	}
+	return m, nil, false
+}
 
+// handleReviewMessages handles review completion and error messages
+func (m *Model) handleReviewMessages(msg tea.Msg) {
+	switch msg := msg.(type) {
 	case ReviewCompleteMsg:
 		m.state = StateReviewing
 		m.reviewResponse = msg.Response
 		m.streaming = false
+		// Clear active cancel (command completed)
+		m.activeCancel = nil
 		m.updateViewport()
 
 	case ReviewErrorMsg:
@@ -96,45 +117,110 @@ func (m *Model) updateNonKeyMsg(msg tea.Msg) (*Model, tea.Cmd) {
 		m.streamChunkChan = nil
 		m.streamErrChan = nil
 		m.streamDoneChan = nil
+		// Clear active cancel (command completed/errored)
+		m.activeCancel = nil
+	}
+}
 
+// handleChatMessages handles chat response and error messages
+func (m *Model) handleChatMessages(msg tea.Msg) {
+	switch msg := msg.(type) {
 	case ChatResponseMsg:
-		m.streaming = false
-		m.chatHistory = append(m.chatHistory, ChatMessage{Role: ChatRoleAssistant, Content: msg.Response})
-		m.updateViewportAndScroll()
+		// Clear active cancel (command completed)
+		m.activeCancel = nil
+		m.handleChatCompletion(msg.Response, false)
 
 	case ChatErrorMsg:
-		m.streaming = false
+		// Clear active cancel (command errored)
+		m.activeCancel = nil
 		m.errorMsg = msg.Err.Error()
-		m.chatHistory = append(m.chatHistory, ChatMessage{Role: ChatRoleAssistant, Content: "Error: " + msg.Err.Error()})
-		m.updateViewportAndScroll()
+		m.handleChatCompletion("Error: "+msg.Err.Error(), true)
+	}
+}
 
+// handleYankMessages handles yank-related messages
+// Returns (model, cmd, shouldReturnEarly)
+func (m *Model) handleYankMessages(msg tea.Msg) (*Model, tea.Cmd, bool) {
+	switch msg := msg.(type) {
 	case yankTimeoutMsg:
 		// Timeout for yank combo - if lastKeyWasY is still true, yank entire review
 		if m.lastKeyWasY {
 			m.lastKeyWasY = false
-			return m, YankReview(m.reviewResponse, m.chatHistory)
+			return m, YankReview(m.reviewResponse, m.chatHistory), true
 		}
+		return m, nil, false
 
 	case YankMsg:
 		m.yankFeedback = fmt.Sprintf("✓ Copied %s to clipboard!", msg.Type)
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-		return m, ClearYankFeedbackCmd(2 * time.Second)
+		m.updateViewportHeight()
+		return m, ClearYankFeedbackCmd(YankFeedbackDuration), true
 
 	case YankFeedbackMsg:
 		m.yankFeedback = ""
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
+		m.updateViewportHeight()
+		return m, nil, false
+	}
+	return m, nil, false
+}
 
-	case PruneFileMsg:
-		if msg.Err != nil {
-			m.yankFeedback = fmt.Sprintf("Error pruning file: %v", msg.Err)
-			return m, ClearYankFeedbackCmd(3 * time.Second)
+// handlePruneMessages handles file pruning messages
+// Returns (model, cmd, shouldReturnEarly)
+func (m *Model) handlePruneMessages(msg tea.Msg) (*Model, tea.Cmd, bool) {
+	pruneMsg, ok := msg.(PruneFileMsg)
+	if !ok {
+		return m, nil, false
+	}
+
+	// Clear active cancel (command completed)
+	m.activeCancel = nil
+
+	if pruneMsg.Err != nil {
+		m.yankFeedback = fmt.Sprintf("Error pruning file: %v", pruneMsg.Err)
+		return m, ClearYankFeedbackCmd(PruneErrorFeedbackDuration), true
+	}
+	// Update pruned files map (PrunedFiles is always initialized in builder.go)
+	m.reviewCtx.PrunedFiles[pruneMsg.FilePath] = pruneMsg.Summary
+	// Update file list to show pruned indicator
+	m.fileList = UpdateFileListModel(m.fileList, m.reviewCtx)
+	m.yankFeedback = fmt.Sprintf("✓ Pruned %s", pruneMsg.FilePath)
+	return m, ClearYankFeedbackCmd(YankFeedbackDuration), true
+}
+
+// updateNonKeyMsg handles non-key messages
+func (m *Model) updateNonKeyMsg(msg tea.Msg) (*Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	// Handle window size
+	if windowMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.handleWindowSize(windowMsg)
+	}
+
+	// Handle spinner tick
+	if tickMsg, ok := msg.(spinner.TickMsg); ok {
+		if cmd := m.handleSpinnerTick(tickMsg); cmd != nil {
+			cmds = append(cmds, cmd)
 		}
-		// Update pruned files map (PrunedFiles is always initialized in builder.go)
-		m.reviewCtx.PrunedFiles[msg.FilePath] = msg.Summary
-		// Update file list to show pruned indicator
-		m.fileList = UpdateFileListModel(m.fileList, m.reviewCtx)
-		m.yankFeedback = fmt.Sprintf("✓ Pruned %s", msg.FilePath)
-		return m, ClearYankFeedbackCmd(2 * time.Second)
+	}
+
+	// Handle stream messages (may return early)
+	if newM, cmd, shouldReturn := m.handleStreamMessages(msg); shouldReturn {
+		return newM, cmd
+	}
+
+	// Handle review messages
+	m.handleReviewMessages(msg)
+
+	// Handle chat messages
+	m.handleChatMessages(msg)
+
+	// Handle yank messages (may return early)
+	if newM, cmd, shouldReturn := m.handleYankMessages(msg); shouldReturn {
+		return newM, cmd
+	}
+
+	// Handle prune messages (may return early)
+	if newM, cmd, shouldReturn := m.handlePruneMessages(msg); shouldReturn {
+		return newM, cmd
 	}
 
 	// Update file list in file list mode
@@ -175,8 +261,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateKeyMsgHelp(msg)
 		case StateFileList:
 			return m.updateKeyMsgFileList(msg)
+		case StateError:
+			return m.updateKeyMsgError(msg)
 		default:
-			// Loading/Error states don't handle keys
+			// Loading state doesn't handle keys
 			return m.updateNonKeyMsg(msg)
 		}
 	default:

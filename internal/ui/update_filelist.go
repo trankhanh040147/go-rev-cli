@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -27,8 +29,11 @@ func (m *Model) updateKeyMsgFileList(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
+		// Create new context for this command
+		ctx, cancel := context.WithCancel(m.rootCtx)
+		m.activeCancel = cancel
 		// Trigger prune command
-		return m, pruneFileCmd(m.ctx, m.apiKey, filePath, content)
+		return m, pruneFileCmd(ctx, m.apiKey, filePath, content)
 	case key.Matches(msg, m.keys.SelectFile):
 		// View selected file (for now, just go back)
 		m.returnToPreviousState()

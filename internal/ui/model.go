@@ -42,10 +42,10 @@ type Model struct {
 	reviewCtx *appcontext.ReviewContext
 
 	// Gemini client
-	client *gemini.Client
-	ctx    context.Context
-	cancel context.CancelFunc
-	apiKey string // API key for prune operations
+	client       *gemini.Client
+	rootCtx      context.Context    // Root context for cancellation chain
+	activeCancel context.CancelFunc // Cancel function for currently active command
+	apiKey       string             // API key for prune operations
 
 	// Review preset
 	preset *preset.Preset
@@ -133,8 +133,8 @@ func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, p *pre
 		renderer = &Renderer{}
 	}
 
-	// Create context with cancellation
-	ctx, cancel := context.WithCancel(context.Background())
+	// Create root context
+	rootCtx := context.Background()
 
 	// Create file list
 	fileListModel := NewFileListModel(reviewCtx)
@@ -143,8 +143,8 @@ func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, p *pre
 		state:              StateLoading,
 		reviewCtx:          reviewCtx,
 		client:             client,
-		ctx:                ctx,
-		cancel:             cancel,
+		rootCtx:            rootCtx,
+		activeCancel:       nil,
 		apiKey:             apiKey,
 		preset:             p,
 		spinner:            s,

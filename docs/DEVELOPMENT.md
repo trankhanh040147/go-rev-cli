@@ -434,6 +434,10 @@ q: quit
 | Non-nil return with error in builder.go                                | Fixed  | Created `SecretsError` type and `ErrSecretsDetected` sentinel. `Build()` now returns `(nil, SecretsError{Matches: ...})` instead of non-nil context with error. |
 | Redundant nil checks for PrunedFiles                                    | Fixed  | Removed redundant `PrunedFiles == nil` checks from `update.go`, `update_filelist.go`, and `file_list.go`. Contract guarantees non-nil initialization in `builder.go:91`. |
 | Hardcoded error type check in cmd/review.go                            | Fixed  | Replaced struct field check with `errors.As()` to extract `SecretsError` and access `Matches`. Uses proper error type checking instead of checking struct fields. |
+| Function size: updateNonKeyMsg exceeds 80-line limit                  | Fixed  | Extracted message handlers into dedicated methods: `handleStreamMessages`, `handleReviewMessages`, `handleChatMessages`, `handleYankMessages`, `handlePruneMessages`, `handleWindowSize`, `handleSpinnerTick`. Function now ~56 lines. |
+| Stateful context management in chat cancellation                       | Fixed  | Changed from storing `ctx` in model to creating context per command. Store only `activeCancel` function for currently active command. Clear `activeCancel` when commands complete or are cancelled. |
+| Hardcoded duration (300ms) for yank timeout                           | Fixed  | Added `YankChordTimeout` constant (300ms) to `internal/ui/constants.go`. Replaced magic number in `update_reviewing.go`. |
+| Repetitive logic in prompt history navigation                         | Fixed  | Created `navigatePromptHistory(direction int)` helper method. Replaced duplicated `PrevPrompt`/`NextPrompt` logic with calls to helper. |
 
 ---
 

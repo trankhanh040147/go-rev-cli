@@ -128,6 +128,11 @@ func UpdateViewportWithSearch(vp *viewport.Model, rawContent string, search *Sea
 	vp.SetContent(displayContent)
 }
 
+// updateViewportHeight updates the viewport height based on current UI state
+func (m *Model) updateViewportHeight() {
+	m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
+}
+
 // resetYankChord resets the yank chord state
 func (m *Model) resetYankChord() {
 	m.lastKeyWasY = false
