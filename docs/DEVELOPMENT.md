@@ -192,13 +192,16 @@ Automatically loads rules from the `.cursor/rules/` directory. The `rules.mdc` f
 
 q: quit
 ```
-- [ ]
+- [ ] IS03: Need to detect/bypass `FinishReasonSafety`
 
 # v0.3.3 - Chat Enhancements
 
 **Status:** Planned
 
 **Features:**
+
+### Raw Ideas
+- [ ] Focus Areas Management: Add an option to type any focus areas user want
 
 ### Integrating new libs
 - [ ] **`samber/lo` Integration:** Refactor slice logic in `diff` and `review` packages.
