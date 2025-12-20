@@ -4,16 +4,43 @@ import (
 	"context"
 
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/trankhanh040147/revcli/internal/gemini"
 	"github.com/trankhanh040147/revcli/internal/prompt"
 )
 
+// ChatRole represents the role of a chat message
+type ChatRole int
+
+const (
+	ChatRoleUser ChatRole = iota
+	ChatRoleAssistant
+)
+
+// String returns the string representation of ChatRole
+func (r ChatRole) String() string {
+	switch r {
+	case ChatRoleUser:
+		return "user"
+	case ChatRoleAssistant:
+		return "assistant"
+	default:
+		return "unknown"
+	}
+}
+
+// ChatMessage represents a message in the chat history
+type ChatMessage struct {
+	Role    ChatRole
+	Content string
+}
+
 // SendChatMessage sends a follow-up question
-func SendChatMessage(ctx context.Context, client *gemini.Client, question string) tea.Cmd {
+func SendChatMessage(ctx context.Context, client *gemini.Client, question string, webSearchEnabled bool) tea.Cmd {
 	return func() tea.Msg {
 		followUp := prompt.BuildFollowUpPrompt(question)
 
-		response, err := client.SendMessage(ctx, followUp)
+		response, err := client.SendMessage(ctx, followUp, webSearchEnabled)
 		if err != nil {
 			return ChatErrorMsg{Err: err}
 		}

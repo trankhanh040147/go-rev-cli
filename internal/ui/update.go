@@ -1,298 +1,228 @@
 package ui
 
 import (
-	"context"
 	"fmt"
-	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
-// updateKeyMsgSearching handles key messages in search mode
-func (m *Model) updateKeyMsgSearching(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, m.keys.SearchEsc):
-		// Exit search mode, keep results
-		m.state = m.previousState
-		m.searchInput.Blur()
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-		return m, nil
-	case key.Matches(msg, m.keys.SearchEnter):
-		// Confirm search and exit search mode
-		m.search.Query = m.searchInput.Value()
-		m.search.Search(m.rawContent)
-		m.state = m.previousState
-		m.searchInput.Blur()
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-		UpdateViewportWithSearch(&m.viewport, m.rawContent, m.search)
-		return m, nil
-	case key.Matches(msg, m.keys.ToggleMode):
-		// Toggle search mode
-		m.search.ToggleMode()
-		UpdateViewportWithSearch(&m.viewport, m.rawContent, m.search)
-		return m, nil
-	default:
-		// Update search input
-		var cmd tea.Cmd
-		m.searchInput, cmd = m.searchInput.Update(msg)
-		// Live search as user types
-		m.search.Query = m.searchInput.Value()
-		m.search.Search(m.rawContent)
-		UpdateViewportWithSearch(&m.viewport, m.rawContent, m.search)
-		return m, cmd
-	}
+// returnToPreviousState returns to the previous state and updates viewport height
+func (m *Model) returnToPreviousState() {
+	m.state = m.previousState
+	m.updateViewportHeight()
 }
 
-// handleYank handles yank commands and returns (model, cmd, handled)
-func (m *Model) handleYank(msg tea.KeyMsg) (*Model, tea.Cmd, bool) {
-	switch {
-	case key.Matches(msg, m.keys.YankReview):
-		if m.state == StateReviewing && !m.lastKeyWasY {
-			// First 'y' press - wait to see if followed by another 'y' (yy)
-			m.lastKeyWasY = true
-			return m, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
-				return yankTimeoutMsg{}
-			}), true
-		} else if m.lastKeyWasY {
-			// Second 'y' press (yy) - yank entire review
-			m.lastKeyWasY = false
-			return m, YankReview(m.reviewResponse, m.chatHistory), true
-		}
-	case key.Matches(msg, m.keys.YankLast):
-		// Yank only the last/most recent response
-		if m.state == StateReviewing {
-			m.lastKeyWasY = false
-			return m, YankLastResponse(m.reviewResponse, m.chatHistory), true
-		}
-		m.lastKeyWasY = false
-		return m, nil, true
+// handleChatCompletion handles chat response completion (success or error)
+// Note: webSearchEnabled is reset in update_chatting.go when sending the message,
+// so it's already set to true when this handler runs
+func (m *Model) handleChatCompletion(content string, isError bool) {
+	m.streaming = false
+	m.chatHistory = append(m.chatHistory, ChatMessage{Role: ChatRoleAssistant, Content: content})
+	m.textarea.Focus() // Ensure textarea remains focused after response/error
+	m.updateViewportAndScroll()
+}
+
+// handleWindowSize handles window resize messages
+func (m *Model) handleWindowSize(msg tea.WindowSizeMsg) {
+	m.width = msg.Width
+	m.height = msg.Height
+
+	m.updateViewportHeight()
+	if !m.ready {
+		m.viewport = viewport.New(msg.Width, m.viewport.Height)
+		m.viewport.Style = lipgloss.NewStyle().Padding(0, 2)
+		m.ready = true
+	} else {
+		m.viewport.Width = msg.Width
+	}
+	m.textarea.SetWidth(msg.Width - 4)
+	// Update file list dimensions
+	m.fileList.SetWidth(msg.Width - 4)
+	m.fileList.SetHeight(msg.Height - 4)
+}
+
+// handleSpinnerTick handles spinner animation tick messages
+func (m *Model) handleSpinnerTick(msg spinner.TickMsg) tea.Cmd {
+	if m.state == StateLoading || m.streaming {
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return cmd
+	}
+	return nil
+}
+
+// handleStreamMessages handles streaming-related messages
+// Returns (model, cmd, shouldReturnEarly)
+func (m *Model) handleStreamMessages(msg tea.Msg) (*Model, tea.Cmd, bool) {
+	switch msg := msg.(type) {
+	case StreamStartMsg:
+		// Start streaming: store channels and begin listening
+		m.streaming = true
+		m.reviewResponse = "" // Reset response buffer
+		m.streamChunkChan = msg.ChunkChan
+		m.streamErrChan = msg.ErrChan
+		m.streamDoneChan = msg.DoneChan
+		// Return commands to listen for chunks, errors, and completion
+		return m, tea.Batch(
+			streamChunkCmd(m.streamChunkChan),
+			streamErrorCmd(m.streamErrChan),
+			streamDoneCmd(m.streamDoneChan),
+		), true
+
+	case StreamChunkMsg:
+		// Append chunk to response and update viewport incrementally
+		m.reviewResponse += msg.Chunk
+		m.updateViewport()
+		// Continue listening for more chunks, errors, and completion
+		return m, tea.Batch(
+			streamChunkCmd(m.streamChunkChan),
+			streamErrorCmd(m.streamErrChan),
+			streamDoneCmd(m.streamDoneChan),
+		), true
+
+	case StreamDoneMsg:
+		// Streaming complete: set final response and transition to reviewing state
+		m.state = StateReviewing
+		m.reviewResponse = msg.FullResponse
+		m.resetStreamState()
+		// Clear active cancel (command completed)
+		m.activeCancel = nil
+		m.updateViewport()
+		return m, nil, false
 	}
 	return m, nil, false
 }
 
-// handleNavigation handles navigation commands
-func (m *Model) handleNavigation(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	if m.state != StateReviewing {
-		return m, nil
-	}
-
-	switch {
-	case key.Matches(msg, m.keys.Down):
-		m.viewport.LineDown(1)
-	case key.Matches(msg, m.keys.Up):
-		m.viewport.LineUp(1)
-	case key.Matches(msg, m.keys.Top):
-		m.viewport.GotoTop()
-	case key.Matches(msg, m.keys.Bottom):
-		m.viewport.GotoBottom()
-	case key.Matches(msg, m.keys.HalfPageDown):
-		m.viewport.HalfViewDown()
-	case key.Matches(msg, m.keys.HalfPageUp):
-		m.viewport.HalfViewUp()
-	case key.Matches(msg, m.keys.PageDown):
-		m.viewport.ViewDown()
-	case key.Matches(msg, m.keys.PageUp):
-		m.viewport.ViewUp()
-	}
-	return m, nil
-}
-
-// handleSearchNavigation handles search navigation commands
-func (m *Model) handleSearchNavigation(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	if m.state != StateReviewing || m.search.Query == "" {
-		return m, nil
-	}
-
-	switch {
-	case key.Matches(msg, m.keys.NextMatch):
-		m.search.NextMatch()
-		UpdateViewportWithSearch(&m.viewport, m.rawContent, m.search)
-		ScrollToCurrentMatch(&m.viewport, m.search)
-		m.resetYankChord()
-	case key.Matches(msg, m.keys.PrevMatch):
-		m.search.PrevMatch()
-		UpdateViewportWithSearch(&m.viewport, m.rawContent, m.search)
-		ScrollToCurrentMatch(&m.viewport, m.search)
-		m.resetYankChord()
-	}
-	return m, nil
-}
-
-// updateKeyMsgReviewing handles key messages in reviewing mode
-func (m *Model) updateKeyMsgReviewing(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	// Check for yank commands first (they handle their own state)
-	if newM, cmd, handled := m.handleYank(msg); handled {
-		return newM, cmd
-	}
-
-	switch {
-	case key.Matches(msg, m.keys.Quit), key.Matches(msg, m.keys.ForceQuit):
-		m.cancel()
-		return m, tea.Quit
-	case key.Matches(msg, m.keys.Search):
-		m.previousState = m.state
-		m.state = StateSearching
-		m.searchInput.SetValue(m.search.Query)
-		m.searchInput.Focus()
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-		return m, textinput.Blink
-	case key.Matches(msg, m.keys.Help):
-		m.previousState = m.state
-		m.state = StateHelp
-		return m, nil
-	case key.Matches(msg, m.keys.EnterChat):
-		m.state = StateChatting
-		m.textarea.Focus()
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-		return m, nil
-	default:
-		// Try navigation
-		m.handleNavigation(msg)
-		// Try search navigation
-		m.handleSearchNavigation(msg)
-		// Reset yank chord for any other key
-		m.resetYankChord()
-	}
-	return m, nil
-}
-
-// updateKeyMsgChatting handles key messages in chatting mode
-func (m *Model) updateKeyMsgChatting(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, m.keys.Quit), key.Matches(msg, m.keys.ForceQuit):
-		if m.textarea.Value() == "" {
-			m.cancel()
-			return m, tea.Quit
-		}
-	case key.Matches(msg, m.keys.ExitChat):
+// handleReviewMessages handles review completion and error messages
+func (m *Model) handleReviewMessages(msg tea.Msg) {
+	switch msg := msg.(type) {
+	case ReviewCompleteMsg:
 		m.state = StateReviewing
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-		return m, nil
-	case key.Matches(msg, m.keys.SendMessage):
-		if !m.streaming {
-			question := strings.TrimSpace(m.textarea.Value())
-			if question != "" {
-				m.promptHistory = UpdatePromptHistory(m.promptHistory, question)
-				m.promptHistoryIndex = -1
-				m.textarea.Reset()
-				m.streaming = true
-				m.chatHistory = append(m.chatHistory, ChatMessage{Role: ChatRoleUser, Content: question})
-				return m, SendChatMessage(m.ctx, m.client, question)
-			}
-		}
-	case key.Matches(msg, m.keys.PrevPrompt):
-		if !m.streaming && len(m.promptHistory) > 0 {
-			_, newIndex, promptText := NavigatePromptHistory(m.promptHistory, m.promptHistoryIndex, -1)
-			m.promptHistoryIndex = newIndex
-			if promptText != "" {
-				m.textarea.SetValue(promptText)
-				m.textarea.CursorEnd()
-			}
-		}
-	case key.Matches(msg, m.keys.NextPrompt):
-		if !m.streaming {
-			_, newIndex, promptText := NavigatePromptHistory(m.promptHistory, m.promptHistoryIndex, 1)
-			m.promptHistoryIndex = newIndex
-			if promptText != "" {
-				m.textarea.SetValue(promptText)
-				m.textarea.CursorEnd()
-			} else {
-				m.textarea.SetValue("")
-			}
-		}
-	case key.Matches(msg, m.keys.CancelRequest):
-		if m.streaming {
-			m.cancel()
-			m.streaming = false
-			m.ctx, m.cancel = context.WithCancel(context.Background())
-			m.yankFeedback = "Request cancelled"
-			m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-			return m, ClearYankFeedbackCmd(2 * time.Second)
-		}
+		m.reviewResponse = msg.Response
+		m.streaming = false
+		// Clear active cancel (command completed)
+		m.activeCancel = nil
+		m.updateViewport()
+
+	case ReviewErrorMsg:
+		m.state = StateError
+		m.errorMsg = msg.Err.Error()
+		m.resetStreamState()
+		// Clear active cancel (command completed/errored)
+		m.activeCancel = nil
 	}
-	return m, nil
 }
 
-// updateKeyMsgHelp handles key messages in help mode
-func (m *Model) updateKeyMsgHelp(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, m.keys.Help), key.Matches(msg, m.keys.SearchEsc):
-		m.state = m.previousState
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-		return m, nil
+// handleChatMessages handles chat response and error messages
+func (m *Model) handleChatMessages(msg tea.Msg) {
+	switch msg := msg.(type) {
+	case ChatResponseMsg:
+		// Clear active cancel (command completed)
+		m.activeCancel = nil
+		m.handleChatCompletion(msg.Response, false)
+
+	case ChatErrorMsg:
+		// Clear active cancel (command errored)
+		m.activeCancel = nil
+		m.errorMsg = msg.Err.Error()
+		m.handleChatCompletion("Error: "+msg.Err.Error(), true)
 	}
-	return m, nil
+}
+
+// handleYankMessages handles yank-related messages
+// Returns (model, cmd, shouldReturnEarly)
+func (m *Model) handleYankMessages(msg tea.Msg) (*Model, tea.Cmd, bool) {
+	switch msg := msg.(type) {
+	case yankTimeoutMsg:
+		// Timeout for yank combo - if lastKeyWasY is still true, yank entire review
+		if m.lastKeyWasY {
+			m.lastKeyWasY = false
+			return m, YankReview(m.reviewResponse, m.chatHistory), true
+		}
+		return m, nil, false
+
+	case YankMsg:
+		m.yankFeedback = fmt.Sprintf("✓ Copied %s to clipboard!", msg.Type)
+		m.updateViewportHeight()
+		return m, ClearYankFeedbackCmd(YankFeedbackDuration), true
+
+	case YankFeedbackMsg:
+		m.yankFeedback = ""
+		m.updateViewportHeight()
+		return m, nil, false
+	}
+	return m, nil, false
+}
+
+// handlePruneMessages handles file pruning messages
+// Returns (model, cmd, shouldReturnEarly)
+func (m *Model) handlePruneMessages(msg tea.Msg) (*Model, tea.Cmd, bool) {
+	pruneMsg, ok := msg.(PruneFileMsg)
+	if !ok {
+		return m, nil, false
+	}
+
+	// Clear active cancel (command completed)
+	m.activeCancel = nil
+
+	if pruneMsg.Err != nil {
+		m.yankFeedback = fmt.Sprintf("Error pruning file: %v", pruneMsg.Err)
+		return m, ClearYankFeedbackCmd(PruneErrorFeedbackDuration), true
+	}
+	// Update pruned files map (PrunedFiles is always initialized in builder.go)
+	m.reviewCtx.PrunedFiles[pruneMsg.FilePath] = pruneMsg.Summary
+	// Update file list to show pruned indicator
+	m.fileList = UpdateFileListModel(m.fileList, m.reviewCtx)
+	m.yankFeedback = fmt.Sprintf("✓ Pruned %s", pruneMsg.FilePath)
+	return m, ClearYankFeedbackCmd(YankFeedbackDuration), true
 }
 
 // updateNonKeyMsg handles non-key messages
 func (m *Model) updateNonKeyMsg(msg tea.Msg) (*Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+	// Handle window size
+	if windowMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.handleWindowSize(windowMsg)
+	}
 
-		viewportHeight := CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-		if !m.ready {
-			m.viewport = viewport.New(msg.Width, viewportHeight)
-			m.viewport.Style = lipgloss.NewStyle().Padding(0, 2)
-			m.ready = true
-		} else {
-			m.viewport.Width = msg.Width
-			m.viewport.Height = viewportHeight
-		}
-		m.textarea.SetWidth(msg.Width - 4)
-
-	case spinner.TickMsg:
-		if m.state == StateLoading || m.streaming {
-			var cmd tea.Cmd
-			m.spinner, cmd = m.spinner.Update(msg)
+	// Handle spinner tick
+	if tickMsg, ok := msg.(spinner.TickMsg); ok {
+		if cmd := m.handleSpinnerTick(tickMsg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	}
 
-	case ReviewCompleteMsg:
-		m.state = StateReviewing
-		m.reviewResponse = msg.Response
-		m.streaming = false
-		m.updateViewport()
+	// Handle stream messages (may return early)
+	if newM, cmd, shouldReturn := m.handleStreamMessages(msg); shouldReturn {
+		return newM, cmd
+	}
 
-	case ReviewErrorMsg:
-		m.state = StateError
-		m.errorMsg = msg.Err.Error()
+	// Handle review messages
+	m.handleReviewMessages(msg)
 
-	case ChatResponseMsg:
-		m.streaming = false
-		m.chatHistory = append(m.chatHistory, ChatMessage{Role: ChatRoleAssistant, Content: msg.Response})
-		m.updateViewportAndScroll()
+	// Handle chat messages
+	m.handleChatMessages(msg)
 
-	case ChatErrorMsg:
-		m.streaming = false
-		m.errorMsg = msg.Err.Error()
-		m.chatHistory = append(m.chatHistory, ChatMessage{Role: ChatRoleAssistant, Content: "Error: " + msg.Err.Error()})
-		m.updateViewportAndScroll()
+	// Handle yank messages (may return early)
+	if newM, cmd, shouldReturn := m.handleYankMessages(msg); shouldReturn {
+		return newM, cmd
+	}
 
-	case yankTimeoutMsg:
-		// Timeout for yank combo - if lastKeyWasY is still true, yank entire review
-		if m.lastKeyWasY {
-			m.lastKeyWasY = false
-			return m, YankReview(m.reviewResponse, m.chatHistory)
-		}
+	// Handle prune messages (may return early)
+	if newM, cmd, shouldReturn := m.handlePruneMessages(msg); shouldReturn {
+		return newM, cmd
+	}
 
-	case YankMsg:
-		m.yankFeedback = fmt.Sprintf("✓ Copied %s to clipboard!", msg.Type)
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
-		return m, ClearYankFeedbackCmd(2 * time.Second)
-
-	case YankFeedbackMsg:
-		m.yankFeedback = ""
-		m.viewport.Height = CalculateViewportHeight(m.height, m.state, m.yankFeedback != "")
+	// Update file list in file list mode
+	if m.state == StateFileList {
+		var cmd tea.Cmd
+		m.fileList, cmd = m.fileList.Update(msg)
+		cmds = append(cmds, cmd)
 	}
 
 	// Update textarea in chat mode
@@ -314,6 +244,23 @@ func (m *Model) updateNonKeyMsg(msg tea.Msg) (*Model, tea.Cmd) {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle quit keys globally (including during loading/streaming)
+		if key.Matches(msg, m.keys.Quit) || key.Matches(msg, m.keys.ForceQuit) {
+			if m.activeCancel != nil {
+				m.activeCancel()
+				m.activeCancel = nil
+			}
+			return m, tea.Quit
+		}
+		// Handle cancel request globally when streaming (including during loading)
+		if key.Matches(msg, m.keys.CancelRequest) && m.streaming {
+			if m.activeCancel != nil {
+				m.activeCancel()
+				m.activeCancel = nil
+			}
+			m.transitionToErrorOnCancel()
+			return m, nil
+		}
 		// Route to state-specific handlers
 		switch m.state {
 		case StateSearching:
@@ -324,8 +271,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateKeyMsgChatting(msg)
 		case StateHelp:
 			return m.updateKeyMsgHelp(msg)
+		case StateFileList:
+			return m.updateKeyMsgFileList(msg)
+		case StateError:
+			return m.updateKeyMsgError(msg)
 		default:
-			// Loading/Error states don't handle keys
+			// Loading state doesn't handle other keys
 			return m.updateNonKeyMsg(msg)
 		}
 	default:

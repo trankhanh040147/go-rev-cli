@@ -32,22 +32,30 @@ type KeyMap struct {
 	Help key.Binding
 
 	// Chat
-	EnterChat     key.Binding
-	ExitChat      key.Binding
-	SendMessage   key.Binding
-	PrevPrompt    key.Binding
-	NextPrompt    key.Binding
-	CancelRequest key.Binding
+	EnterChat      key.Binding
+	ExitChat       key.Binding
+	SendMessage    key.Binding
+	PrevPrompt     key.Binding
+	NextPrompt     key.Binding
+	CancelRequest  key.Binding
+	ToggleWebSearch key.Binding
 
 	// Yank
 	YankReview key.Binding
 	YankLast   key.Binding
+
+	// File list
+	FileList      key.Binding
+	FileListPrune key.Binding
+	SelectFile    key.Binding
+	Back          key.Binding
 }
 
 // DefaultKeyMap returns the default keymap
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
 		// Global
+		// todo: check error q not quit
 		Quit: key.NewBinding(
 			key.WithKeys("q"),
 			key.WithHelp("q", "quit"),
@@ -148,6 +156,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("ctrl+x"),
 			key.WithHelp("ctrl+x", "cancel request"),
 		),
+		ToggleWebSearch: key.NewBinding(
+			key.WithKeys("ctrl+w"),
+			key.WithHelp("ctrl+w", "toggle web search"),
+		),
 
 		// Yank
 		YankReview: key.NewBinding(
@@ -157,6 +169,24 @@ func DefaultKeyMap() KeyMap {
 		YankLast: key.NewBinding(
 			key.WithKeys("Y"),
 			key.WithHelp("Y", "yank last"),
+		),
+
+		// File list
+		FileList: key.NewBinding(
+			key.WithKeys("i"),
+			key.WithHelp("i", "file list"),
+		),
+		FileListPrune: key.NewBinding(
+			key.WithKeys("i"),
+			key.WithHelp("i", "prune file"),
+		),
+		SelectFile: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "select/view"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "back"),
 		),
 	}
 }

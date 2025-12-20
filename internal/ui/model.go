@@ -3,10 +3,9 @@ package ui
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
-	"time"
+	"log"
 
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -28,6 +27,7 @@ const (
 	StateChatting
 	StateSearching
 	StateHelp
+	StateFileList
 	StateError
 	StateQuitting
 )
@@ -42,9 +42,11 @@ type Model struct {
 	reviewCtx *appcontext.ReviewContext
 
 	// Gemini client
-	client *gemini.Client
-	ctx    context.Context
-	cancel context.CancelFunc
+	client       *gemini.Client
+	flashClient  *gemini.Client     // Shared client for prune operations (gemini-flash)
+	rootCtx      context.Context    // Root context for cancellation chain
+	activeCancel context.CancelFunc // Cancel function for currently active command
+	apiKey       string             // API key for prune operations
 
 	// Review preset
 	preset *preset.Preset
@@ -54,6 +56,7 @@ type Model struct {
 	viewport    viewport.Model
 	textarea    textarea.Model
 	searchInput textinput.Model
+	fileList    list.Model
 	renderer    *Renderer
 
 	// Search state
@@ -70,8 +73,14 @@ type Model struct {
 	height int
 
 	// Flags
-	ready     bool
-	streaming bool
+	ready            bool
+	streaming        bool
+	webSearchEnabled bool // Web search toggle for follow-up questions (default: true, resets per question)
+
+	// Streaming channels (set during StreamStartMsg)
+	streamChunkChan chan string
+	streamErrChan   chan error
+	streamDoneChan  chan string
 
 	// Yank state
 	yankFeedback string // Feedback message for yank
@@ -85,39 +94,14 @@ type Model struct {
 	keys KeyMap
 }
 
-// ChatRole represents the role of a chat message
-type ChatRole int
-
-const (
-	ChatRoleUser ChatRole = iota
-	ChatRoleAssistant
-)
-
-// String returns the string representation of ChatRole
-func (r ChatRole) String() string {
-	switch r {
-	case ChatRoleUser:
-		return "user"
-	case ChatRoleAssistant:
-		return "assistant"
-	default:
-		return "unknown"
-	}
-}
-
-// ChatMessage represents a message in the chat history
-type ChatMessage struct {
-	Role    ChatRole
-	Content string
-}
-
 // NewModel creates a new application model
-func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, p *preset.Preset) *Model {
+func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, flashClient *gemini.Client, p *preset.Preset, apiKey string) *Model {
 	// Create spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED"))
 
+	// todo: check cannot type on this text area
 	// Create textarea for chat input
 	ta := textarea.New()
 	ta.Placeholder = "Ask a follow-up question..."
@@ -147,27 +131,34 @@ func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, p *pre
 	// Create renderer (with fallback if it fails)
 	renderer, err := NewRenderer()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to initialize markdown renderer: %v\n", err)
+		log.Printf("warning: failed to initialize markdown renderer: %v", err)
 		renderer = &Renderer{}
 	}
 
-	// Create context with cancellation
-	ctx, cancel := context.WithCancel(context.Background())
+	// Create root context
+	rootCtx := context.Background()
+
+	// Create file list
+	fileListModel := NewFileListModel(reviewCtx)
 
 	return &Model{
 		state:              StateLoading,
 		reviewCtx:          reviewCtx,
 		client:             client,
-		ctx:                ctx,
-		cancel:             cancel,
+		flashClient:        flashClient,
+		rootCtx:            rootCtx,
+		activeCancel:       nil,
+		apiKey:             apiKey,
 		preset:             p,
 		spinner:            s,
 		textarea:           ta,
 		searchInput:        si,
+		fileList:           fileListModel,
 		search:             NewSearchState(),
 		renderer:           renderer,
 		ready:              false,
 		streaming:          false,
+		webSearchEnabled:   true, // Default to enabled
 		promptHistory:      []string{},
 		promptHistoryIndex: -1,
 		keys:               DefaultKeyMap(),
@@ -183,8 +174,8 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Run starts the Bubbletea program
-func Run(reviewCtx *appcontext.ReviewContext, client *gemini.Client, p *preset.Preset) error {
-	model := NewModel(reviewCtx, client, p)
+func Run(reviewCtx *appcontext.ReviewContext, client *gemini.Client, flashClient *gemini.Client, p *preset.Preset, apiKey string) error {
+	model := NewModel(reviewCtx, client, flashClient, p, apiKey)
 	program := tea.NewProgram(model, tea.WithAltScreen())
 
 	if _, err := program.Run(); err != nil {
@@ -194,56 +185,24 @@ func Run(reviewCtx *appcontext.ReviewContext, client *gemini.Client, p *preset.P
 	return nil
 }
 
-// RunSimple runs a simple non-interactive review
-func RunSimple(ctx context.Context, w io.Writer, reviewCtx *appcontext.ReviewContext, client *gemini.Client, p *preset.Preset) error {
-	// Initialize chat with system prompt (with preset if specified)
-	systemPrompt := appcontext.GetSystemPrompt()
-	if p != nil {
-		systemPrompt = appcontext.GetSystemPromptWithPreset(p.Prompt, p.Replace)
-	}
-	client.StartChat(systemPrompt)
+// resetStreamState resets streaming state and clears all stream channels
+func (m *Model) resetStreamState() {
+	m.streaming = false
+	m.streamChunkChan = nil
+	m.streamErrChan = nil
+	m.streamDoneChan = nil
+}
 
-	fmt.Fprintln(w, RenderTitle("🔍 Code Review"))
-	fmt.Fprintln(w, RenderSubtitle(reviewCtx.Summary()))
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Analyzing your code changes...")
-	fmt.Fprintln(w)
-
-	// Create renderer
-	renderer, err := NewRenderer()
-	if err != nil {
-		return fmt.Errorf("failed to create renderer: %w", err)
-	}
-
-	// Stream the response
-	startTime := time.Now()
-	response, err := client.SendMessageStream(ctx, reviewCtx.UserPrompt, func(chunk string) {
-		fmt.Fprint(w, chunk)
-	})
-	if err != nil {
-		return fmt.Errorf("review failed: %w", err)
-	}
-
-	// Render the full response with markdown
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, RenderDivider(80))
-	fmt.Fprintln(w)
-
-	rendered, err := renderer.RenderMarkdown(response)
-	if err != nil {
-		fmt.Fprintln(w, response)
+// transitionToErrorOnCancel handles state transition when a request is cancelled
+func (m *Model) transitionToErrorOnCancel() {
+	m.resetStreamState()
+	// Always transition to error state with appropriate message
+	if m.reviewResponse != "" {
+		m.state = StateError
+		m.errorMsg = "Request cancelled (partial response available)"
+		m.updateViewport() // Update viewport to show partial response
 	} else {
-		fmt.Fprintln(w, rendered)
+		m.state = StateError
+		m.errorMsg = "Request cancelled"
 	}
-
-	elapsed := time.Since(startTime)
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, RenderSuccess(fmt.Sprintf("Review completed in %s", elapsed.Round(time.Millisecond))))
-
-	// Display token usage
-	if usage := client.GetLastUsage(); usage != nil {
-		fmt.Fprintln(w, RenderTokenUsage(usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens))
-	}
-
-	return nil
 }
