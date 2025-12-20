@@ -152,7 +152,7 @@ func extractText(resp *genai.GenerateContentResponse) string {
 			parts = append(parts, txt)
 		} else if part.FunctionCall != nil {
 			log.Printf("Warning: FunctionCall part detected but not processed (part will be skipped)")
-		} else if part.Blob != nil {
+		} else if part.InlineData != nil {
 			log.Printf("Warning: Blob part detected but not processed (part will be skipped)")
 		}
 	}
