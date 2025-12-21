@@ -3,7 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/trankhanh040147/revcli)](https://goreportcard.com/report/github.com/trankhanh040147/revcli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **Gemini-powered code reviewer CLI.**
+> **LLM-powered code reviewer CLI.**
 
 **revcli** is a local command-line tool that acts as an intelligent peer reviewer. It reads your local git changes and uses Google's Gemini LLM to analyze your code for bugs, optimization opportunities, and best practices—all before you push a single commit.
 
