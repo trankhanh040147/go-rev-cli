@@ -19,8 +19,8 @@ frontmatter, which ensures:
 1. **Global Fix:** Search codebase (`rg`/`fd`) for similar patterns/implementations. Fix **all** occurrences, not just
    the reported one.
 2. **Documentation:**
-    - Update "Known Bugs" table (Status: Fixed).
-    - Update coding standards in `.cursor/rules/rules.mdc` if the bug reflects a common anti-pattern.
+  - Update "Known Bugs" table (Status: Fixed).
+  - Update coding standards in `.cursor/rules/rules.mdc` if the bug reflects a common anti-pattern.
 3. **Testing:** Verify edge cases: Interactive, Piped (`|`), Redirected (`<`), and Non-interactive modes.
 
 > **Reference:** Bug Fix Protocol are defined in [`.cursor/rules/rules.mdc`](../.cursor/rules/rules.mdc).
@@ -36,10 +36,10 @@ frontmatter, which ensures:
 - [x] File-scope context: reads full content of modified files
 - [x] Gemini API client with streaming response support
 - [x] Interactive TUI with Bubbletea
-    - [x] State machine (Loading → Reviewing → Chatting)
-    - [x] Markdown rendering with Glamour
-    - [x] Follow-up chat mode
-    - [x] Keyboard shortcuts (q: quit, Enter: chat, Esc: back)
+  - [x] State machine (Loading → Reviewing → Chatting)
+  - [x] Markdown rendering with Glamour
+  - [x] Follow-up chat mode
+  - [x] Keyboard shortcuts (q: quit, Enter: chat, Esc: back)
 - [x] Senior Go Engineer persona prompt
 - [x] File filtering (vendor/, generated, tests, go.sum)
 - [x] Secret detection (API keys, tokens, passwords, private keys)
@@ -55,19 +55,19 @@ frontmatter, which ensures:
 **Features Implemented:**
 
 - [x] **Custom base branch/commit comparison**
-    - `--base <branch>` - Compare against a branch (e.g., `main`, `develop`)
-    - `--base <commit>` - Compare against a specific commit hash
-    - MR-style diff using `git diff base...HEAD`
+  - `--base <branch>` - Compare against a branch (e.g., `main`, `develop`)
+  - `--base <commit>` - Compare against a specific commit hash
+  - MR-style diff using `git diff base...HEAD`
 - [x] **Update default model** - Changed to `gemini-2.5-pro`
 - [x] **Show context preview** - Display files/tokens being sent before review
-    - File list with sizes
-    - Total file count and size
-    - Ignored files list
-    - Token estimate
+  - File list with sizes
+  - Total file count and size
+  - Ignored files list
+  - Token estimate
 - [x] **Token usage display** - Show actual tokens used after review
-    - Prompt tokens
-    - Completion tokens
-    - Total tokens
+  - Prompt tokens
+  - Completion tokens
+  - Total tokens
 
 **Breaking Changes:**
 
@@ -162,9 +162,9 @@ frontmatter, which ensures:
 #### 🎯 Intent-Driven Review (New "Prompt First") ✅
 
 - [x] **Pre-Review Form (`huh`):** Before scanning, ask:
-    - Custom instruction (e.g., "Focus on error handling").
-    - Select Focus Areas (Security, Performance, Logic, Style, Typo, Naming).
-    - Negative constraints (what to ignore).
+  - Custom instruction (e.g., "Focus on error handling").
+  - Select Focus Areas (Security, Performance, Logic, Style, Typo, Naming).
+  - Negative constraints (what to ignore).
 - [x] **Smart Context:** If the user asks for "Security," automatically inject the `security` preset rules into the
   system prompt.
 - [x] **Intent Integration:** Intent collected via `ui.CollectIntent()` in `cmd/review.go`, passed to
@@ -173,11 +173,11 @@ frontmatter, which ensures:
 #### 🧠 Context Pruning (Dynamic Ignore) ✅
 
 - [x] **"Summarize & Prune" Action:** In the TUI, pressing `i` in reviewing mode:
-    1. Enters file list view (`StateFileList`) using `bubbles/list`.
-    2. User selects file and presses `i` to prune.
-    3. Uses Gemini Flash model (`gemini-2.5-flash`) to summarize the code file.
-    4. Replaces the actual code in the context window with summary in subsequent prompts.
-    5. **Benefit:** Saves massive tokens for the _next_ turn of chat while keeping the "map" of the code.
+  1. Enters file list view (`StateFileList`) using `bubbles/list`.
+  2. User selects file and presses `i` to prune.
+  3. Uses Gemini Flash model (`gemini-2.5-flash`) to summarize the code file.
+  4. Replaces the actual code in the context window with summary in subsequent prompts.
+  5. **Benefit:** Saves massive tokens for the _next_ turn of chat while keeping the "map" of the code.
 - [x] **File List Navigation:** Vim-style navigation (`j/k`) through files, visual indicator (✓) for pruned files.
 - [x] **Pruning Integration:** `PrunedFiles` map in `ReviewContext`, used by `BuildReviewPromptWithPruning()` in prompt
   template.
@@ -196,7 +196,7 @@ frontmatter, which ensures:
 - `internal/ui/file_list.go` - File list component using `bubbles/list`
 - `internal/ui/prune.go` - `PruneFile()` function using Gemini Flash for summarization
 - `internal/ui/update_filelist.go` - File list state update handlers
-- `internal/ui/update_prune.go` - Pruning action handlers
+- `internal/ui/prune.go` - Pruning action handlers
 
 **Modified Files:**
 
@@ -217,26 +217,25 @@ frontmatter, which ensures:
 
 Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 
-# v0.4.0 - Responsive control  
-
-**Status:** Planned
+# v0.4.0 - Responsive control
+**Status:** Planned (Scalable Standard)
 
 ### 1. Interaction & Feedback
 
-* [ ] **Async Pruning:** Wrap pruning logic in `tea.Cmd` with spinner feedback to prevent UI freezing.
-* [ ] **Cancellation:** Implement `context.WithCancel` for `Ctrl+X` interruption during generation.
-* [ ] **Intent Input:** Upgrade `huh` form to accept custom text intent ("Focus on X").
+* [ ] **Async Pruning with Enhanced Feedback:** Implement `tea.Cmd` with file-specific spinner and non-blocking UI for other actions. Consider subtle progress for long operations.
+* [ ] **Robust Cancellation (`Ctrl+X`):** Propagate `context.WithCancel` through all long-running operations; ensure immediate UI feedback and clean state on cancellation.
+* [ ] **Guided Intent Input:** Upgrade `huh` form for custom text intent with validation and dynamic suggestions/auto-completion for focus areas.
 
 ### 2. DevOps & CI/CD
 
-* [ ] **Security Workflow:** Integrate **OpenSSF Scorecard** (`scorecard.yaml`) for supply chain security.
-* [ ] **Release Automation:** Configure **GoReleaser** (`.goreleaser.yaml`) for multi-platform builds and Homebrew tap.
-* [ ] **CI Pipeline:** Add `golangci-lint` and `go test -race` workflow.* [ ] **CI Pipeline:** Add `golangci-lint` and `go test -race` workflow.
+* [ ] **Actionable Security Workflow:** Integrate OpenSSF Scorecard (`scorecard.yaml`) in CI; explore `revcli` consumption for in-terminal insights.
+* [ ] **Secure Release Automation:** Configure GoReleaser (`.goreleaser.yaml`) for multi-platform builds, Homebrew tap, and integrate Cosign for artifact signing.
+* [ ] **Fast & Comprehensive CI Pipeline:** Add `golangci-lint` (strict config) and `go test -race`; optimize for speed and provide local pre-commit targets.
 
 # v0.4.1 - Structured Intelligence
 
 ### Bugs
-- [ ] Change keymap for toggle Web Search 
+- [ ] Change keymap for toggle Web Search
 
 ### Core features
 
@@ -280,9 +279,9 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 
 - [ ] Multi-pane layout inspired by lazy-git/lazy-docker
 - [ ] Panes:
-    - Reviews pane (list of reviews in session)
-    - Conversation pane (current chat)
-    - Config pane (model, API key, style)
+  - Reviews pane (list of reviews in session)
+  - Conversation pane (current chat)
+  - Config pane (model, API key, style)
 - [ ] `Tab` to switch between panes
 - [ ] `1/2/3` to jump to specific pane
 
