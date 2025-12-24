@@ -254,6 +254,13 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 * [ ] **Token Transparency:** Extract `UsageMetadata` from JSON response; display "Tokens In/Out & Cost" in list footer.
 
 ### Planned features
+#### Go AST Integration
+* [ ] **Symbolic Mapping:** Map `git diff` hunks to `ast.Node` boundaries (FuncDecl, TypeDecl) using `go/parser`.
+* [ ] **Context Hoisting:** Automatically inject full parent `struct` and `interface` definitions into prompts when methods are modified to prevent type hallucinations.
+* [ ] **Signature Extraction:** Feed exact function signatures and field types into the LLM to ensure suggestions respect existing API contracts.
+* [ ] **Semantic Impact:** Use `go/types` for cross-package dependency analysis to detect downstream breaking changes.
+* [ ] **AST-Based Patching:** Transition from `diff` patches to `github.com/dave/dst` for format-preserving, type-safe code generation.
+* [ ] **Pre-flight Validation:** Run `parser.ParseSource` on LLM suggestions to verify syntactical correctness before displaying in TUI.
 #### Context Intelligence
 * [ ] **Dependency Graph:** Implement Regex-based import scanning to find "Related Context" (files that import the changed code).
 * [ ] **Smart Pruning:** Feed "Related Context" summaries into the prompt to detect breaking changes in other files.
