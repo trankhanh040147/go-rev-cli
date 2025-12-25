@@ -303,6 +303,9 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 - [ ] **AST-Based Patching:** Transition from `diff` patches to `github.com/dave/dst` for format-preserving, type-safe code generation.
 - [ ] **Pre-flight Validation:** Run `parser.ParseSource` on LLM suggestions to verify syntactical correctness before displaying in TUI.
 
+#### Smart Read
+- Add mode to read codebase and adapt styles
+
 #### Context Intelligence
 
 - [ ] **Dependency Graph:** Implement Regex-based import scanning to find "Related Context" (files that import the changed code).
