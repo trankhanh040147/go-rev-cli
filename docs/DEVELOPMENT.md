@@ -433,6 +433,10 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 
 > Raw ideas for future consideration
 
+**Intent Driven**
+- Add model selection 
+- Add preset selection
+
 **Unit Test**
 - Have an option in review mode to generate unit test
 - Dedicated command to generate Unit Test (build/test)
