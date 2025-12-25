@@ -12,6 +12,16 @@ import (
 // pruneFileCmd creates a command to prune a file
 func pruneFileCmd(ctx context.Context, flashClient *gemini.Client, filePath, content string) tea.Cmd {
 	return func() tea.Msg {
+		// Check if context is already cancelled
+		select {
+		case <-ctx.Done():
+			return PruneFileMsg{
+				FilePath: filePath,
+				Err:      fmt.Errorf("pruning cancelled: %w", ctx.Err()),
+			}
+		default:
+		}
+
 		if flashClient == nil {
 			return PruneFileMsg{
 				FilePath: filePath,
@@ -20,6 +30,10 @@ func pruneFileCmd(ctx context.Context, flashClient *gemini.Client, filePath, con
 		}
 
 		summary, err := PruneFile(ctx, flashClient, filePath, content)
+		// Check if error is due to cancellation
+		if err != nil && ctx.Err() != nil {
+			err = fmt.Errorf("pruning cancelled: %w", ctx.Err())
+		}
 		return PruneFileMsg{
 			FilePath: filePath,
 			Summary:  summary,

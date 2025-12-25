@@ -24,13 +24,20 @@ func CollectIntent(interactive bool) (*appcontext.Intent, error) {
 		huh.NewGroup(
 			huh.NewText().
 				Title("Custom Instructions (Optional)").
-				Description("Provide any specific instructions for the review").
+				Description("Provide specific instructions for the review. Examples: 'Focus on error handling', 'Check for race conditions', 'Review API design'").
 				Value(&customInstruction).
-				CharLimit(500),
+				CharLimit(500).
+				Validate(func(s string) error {
+					trimmed := strings.TrimSpace(s)
+					if len(trimmed) > 0 && len(trimmed) < 10 {
+						return fmt.Errorf("instructions should be at least 10 characters (or leave empty)")
+					}
+					return nil
+				}),
 
 			huh.NewMultiSelect[string]().
 				Title("Focus Areas").
-				Description("Select areas to focus on (space to toggle, enter to confirm)").
+				Description("Select areas to focus on (space to toggle, enter to confirm). Leave empty to review everything.").
 				Options(
 					huh.NewOption("Security", "security"),
 					huh.NewOption("Performance", "performance"),
@@ -43,7 +50,8 @@ func CollectIntent(interactive bool) (*appcontext.Intent, error) {
 
 			huh.NewText().
 				Title("Negative Constraints (Optional)").
-				Description("What should be ignored? (e.g., 'variable names', 'style issues')").
+				Description("What should be ignored? Separate multiple items with commas. Examples: 'variable names', 'style issues', 'documentation'").
+				Placeholder("e.g., 'variable names', 'style issues'").
 				Value(&negativeConstraints).
 				CharLimit(200),
 

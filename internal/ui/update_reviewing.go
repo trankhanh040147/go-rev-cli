@@ -124,7 +124,7 @@ func (m *Model) updateKeyMsgReviewing(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		m.previousState = m.state
 		m.state = StateFileList
 		// Update file list with current pruned state
-		m.fileList = UpdateFileListModel(m.fileList, m.reviewCtx)
+		m.fileList = UpdateFileListModel(m.fileList, m.reviewCtx, nil)
 		// Set file list dimensions
 		m.fileList.SetWidth(m.width - 4)
 		m.fileList.SetHeight(m.height - 4)
