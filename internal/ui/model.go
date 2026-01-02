@@ -90,6 +90,11 @@ type Model struct {
 	promptHistory      []string // History of sent prompts
 	promptHistoryIndex int      // Current position in history (-1 for new prompt)
 
+	// Pruning state (per-file tracking)
+	pruningFiles    map[string]bool                   // Track which files are currently being pruned
+	pruningSpinners map[string]spinner.Model          // Spinners for each file being pruned
+	pruningCancels  map[string]context.CancelFunc     // Cancel functions for each pruning operation
+
 	// Keybindings
 	keys KeyMap
 }
@@ -139,7 +144,7 @@ func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, flashC
 	rootCtx := context.Background()
 
 	// Create file list
-	fileListModel := NewFileListModel(reviewCtx)
+	fileListModel := NewFileListModel(reviewCtx, nil)
 
 	return &Model{
 		state:              StateLoading,
@@ -161,6 +166,9 @@ func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, flashC
 		webSearchEnabled:   true, // Default to enabled
 		promptHistory:      []string{},
 		promptHistoryIndex: -1,
+		pruningFiles:       make(map[string]bool),
+		pruningSpinners:    make(map[string]spinner.Model),
+		pruningCancels:     make(map[string]context.CancelFunc),
 		keys:               DefaultKeyMap(),
 	}
 }

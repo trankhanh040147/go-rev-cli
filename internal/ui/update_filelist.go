@@ -4,7 +4,9 @@ import (
 	"context"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // updateKeyMsgFileList handles key messages in file list mode
@@ -24,16 +26,33 @@ func (m *Model) updateKeyMsgFileList(msg tea.KeyMsg) (*Model, tea.Cmd) {
 			// Already pruned, skip
 			return m, nil
 		}
+		// Check if already pruning
+		if m.pruningFiles[filePath] {
+			// Already pruning, skip
+			return m, nil
+		}
 		// Get file content
 		content, ok := m.reviewCtx.FileContents[filePath]
 		if !ok {
 			return m, nil
 		}
+		// Mark file as pruning
+		m.pruningFiles[filePath] = true
+		// Create spinner for this file
+		fileSpinner := spinner.New()
+		fileSpinner.Spinner = spinner.Dot
+		fileSpinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED"))
+		m.pruningSpinners[filePath] = fileSpinner
 		// Create new context for this command
 		ctx, cancel := context.WithCancel(m.rootCtx)
-		m.activeCancel = cancel
-		// Trigger prune command
-		return m, pruneFileCmd(ctx, m.flashClient, filePath, content)
+		m.pruningCancels[filePath] = cancel
+		// Update file list to show pruning indicator
+		m.fileList = UpdateFileListModel(m.fileList, m.reviewCtx, m.pruningFiles)
+		// Start spinner tick and prune command
+		return m, tea.Batch(
+			fileSpinner.Tick,
+			pruneFileCmd(ctx, m.flashClient, filePath, content),
+		)
 	case key.Matches(msg, m.keys.SelectFile):
 		// View selected file (for now, just go back)
 		m.returnToPreviousState()

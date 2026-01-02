@@ -68,6 +68,7 @@ alwaysApply: true
 
 ### 5. Quality & Maintenance
 - **[CRITICAL] DRY Enforcement:** Flag repeated logic >2 times. Extract to helpers or use `samber/lo`.
+- **Function Variants:** Avoid "With*" function variants (e.g., `NewX`, `NewXWithY`). Prefer optional parameters (nil maps/slices) to consolidate logic.
 - **State Transitions:** Extract repeated state transition logic (e.g., `m.state = m.previousState; m.viewport.Height = ...`) into helper methods like `returnToPreviousState()`.
 - **Error Handling:** Wrap errors: `fmt.Errorf("ctx: %w", err)`. Log before fallback.
 - **Method Receivers:** Mutating methods MUST use pointer receivers `(m *Type)`.

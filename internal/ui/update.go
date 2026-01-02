@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"fmt"
-
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -43,142 +41,6 @@ func (m *Model) handleWindowSize(msg tea.WindowSizeMsg) {
 	// Update file list dimensions
 	m.fileList.SetWidth(msg.Width - 4)
 	m.fileList.SetHeight(msg.Height - 4)
-}
-
-// handleSpinnerTick handles spinner animation tick messages
-func (m *Model) handleSpinnerTick(msg spinner.TickMsg) tea.Cmd {
-	if m.state == StateLoading || m.streaming {
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return cmd
-	}
-	return nil
-}
-
-// handleStreamMessages handles streaming-related messages
-// Returns (model, cmd, shouldReturnEarly)
-func (m *Model) handleStreamMessages(msg tea.Msg) (*Model, tea.Cmd, bool) {
-	switch msg := msg.(type) {
-	case StreamStartMsg:
-		// Start streaming: store channels and begin listening
-		m.streaming = true
-		m.reviewResponse = "" // Reset response buffer
-		m.streamChunkChan = msg.ChunkChan
-		m.streamErrChan = msg.ErrChan
-		m.streamDoneChan = msg.DoneChan
-		// Return commands to listen for chunks, errors, and completion
-		return m, tea.Batch(
-			streamChunkCmd(m.streamChunkChan),
-			streamErrorCmd(m.streamErrChan),
-			streamDoneCmd(m.streamDoneChan),
-		), true
-
-	case StreamChunkMsg:
-		// Append chunk to response and update viewport incrementally
-		m.reviewResponse += msg.Chunk
-		m.updateViewport()
-		// Continue listening for more chunks, errors, and completion
-		return m, tea.Batch(
-			streamChunkCmd(m.streamChunkChan),
-			streamErrorCmd(m.streamErrChan),
-			streamDoneCmd(m.streamDoneChan),
-		), true
-
-	case StreamDoneMsg:
-		// Streaming complete: set final response and transition to reviewing state
-		m.state = StateReviewing
-		m.reviewResponse = msg.FullResponse
-		m.resetStreamState()
-		// Clear active cancel (command completed)
-		m.activeCancel = nil
-		m.updateViewport()
-		return m, nil, false
-	}
-	return m, nil, false
-}
-
-// handleReviewMessages handles review completion and error messages
-func (m *Model) handleReviewMessages(msg tea.Msg) {
-	switch msg := msg.(type) {
-	case ReviewCompleteMsg:
-		m.state = StateReviewing
-		m.reviewResponse = msg.Response
-		m.streaming = false
-		// Clear active cancel (command completed)
-		m.activeCancel = nil
-		m.updateViewport()
-
-	case ReviewErrorMsg:
-		m.state = StateError
-		m.errorMsg = msg.Err.Error()
-		m.resetStreamState()
-		// Clear active cancel (command completed/errored)
-		m.activeCancel = nil
-	}
-}
-
-// handleChatMessages handles chat response and error messages
-func (m *Model) handleChatMessages(msg tea.Msg) {
-	switch msg := msg.(type) {
-	case ChatResponseMsg:
-		// Clear active cancel (command completed)
-		m.activeCancel = nil
-		m.handleChatCompletion(msg.Response, false)
-
-	case ChatErrorMsg:
-		// Clear active cancel (command errored)
-		m.activeCancel = nil
-		m.errorMsg = msg.Err.Error()
-		m.handleChatCompletion("Error: "+msg.Err.Error(), true)
-	}
-}
-
-// handleYankMessages handles yank-related messages
-// Returns (model, cmd, shouldReturnEarly)
-func (m *Model) handleYankMessages(msg tea.Msg) (*Model, tea.Cmd, bool) {
-	switch msg := msg.(type) {
-	case yankTimeoutMsg:
-		// Timeout for yank combo - if lastKeyWasY is still true, yank entire review
-		if m.lastKeyWasY {
-			m.lastKeyWasY = false
-			return m, YankReview(m.reviewResponse, m.chatHistory), true
-		}
-		return m, nil, false
-
-	case YankMsg:
-		m.yankFeedback = fmt.Sprintf("✓ Copied %s to clipboard!", msg.Type)
-		m.updateViewportHeight()
-		return m, ClearYankFeedbackCmd(YankFeedbackDuration), true
-
-	case YankFeedbackMsg:
-		m.yankFeedback = ""
-		m.updateViewportHeight()
-		return m, nil, false
-	}
-	return m, nil, false
-}
-
-// handlePruneMessages handles file pruning messages
-// Returns (model, cmd, shouldReturnEarly)
-func (m *Model) handlePruneMessages(msg tea.Msg) (*Model, tea.Cmd, bool) {
-	pruneMsg, ok := msg.(PruneFileMsg)
-	if !ok {
-		return m, nil, false
-	}
-
-	// Clear active cancel (command completed)
-	m.activeCancel = nil
-
-	if pruneMsg.Err != nil {
-		m.yankFeedback = fmt.Sprintf("Error pruning file: %v", pruneMsg.Err)
-		return m, ClearYankFeedbackCmd(PruneErrorFeedbackDuration), true
-	}
-	// Update pruned files map (PrunedFiles is always initialized in builder.go)
-	m.reviewCtx.PrunedFiles[pruneMsg.FilePath] = pruneMsg.Summary
-	// Update file list to show pruned indicator
-	m.fileList = UpdateFileListModel(m.fileList, m.reviewCtx)
-	m.yankFeedback = fmt.Sprintf("✓ Pruned %s", pruneMsg.FilePath)
-	return m, ClearYankFeedbackCmd(YankFeedbackDuration), true
 }
 
 // updateNonKeyMsg handles non-key messages
@@ -252,14 +114,39 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		}
-		// Handle cancel request globally when streaming (including during loading)
-		if key.Matches(msg, m.keys.CancelRequest) && m.streaming {
+		// Handle cancel request globally for all long-running operations
+		if key.Matches(msg, m.keys.CancelRequest) {
+			// Cancel main active operation
 			if m.activeCancel != nil {
 				m.activeCancel()
 				m.activeCancel = nil
 			}
-			m.transitionToErrorOnCancel()
-			return m, nil
+			// Cancel all active pruning operations
+			for filePath, cancel := range m.pruningCancels {
+				cancel()
+				delete(m.pruningCancels, filePath)
+				delete(m.pruningFiles, filePath)
+				delete(m.pruningSpinners, filePath)
+			}
+			// Update file list to remove pruning indicators
+			if m.state == StateFileList {
+				m.fileList = UpdateFileListModel(m.fileList, m.reviewCtx, m.pruningFiles)
+			}
+			// Handle cancellation based on state
+			if m.state == StateLoading || m.streaming {
+				// For loading/streaming, transition to error state
+				m.transitionToErrorOnCancel()
+				return m, nil
+			} else if m.state == StateFileList {
+				// For file list (pruning), show feedback but stay in file list
+				m.yankFeedback = "Pruning cancelled"
+				m.updateViewportHeight()
+				return m, ClearYankFeedbackCmd(YankFeedbackDuration)
+			}
+			// If no active operation, just show feedback
+			m.yankFeedback = "No active operation to cancel"
+			m.updateViewportHeight()
+			return m, ClearYankFeedbackCmd(YankFeedbackDuration)
 		}
 		// Route to state-specific handlers
 		switch m.state {

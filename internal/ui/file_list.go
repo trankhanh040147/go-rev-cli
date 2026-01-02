@@ -10,18 +10,21 @@ import (
 
 // FileListItem represents an item in the file list
 type FileListItem struct {
-	Path   string
-	Size   int
-	Pruned bool
+	Path    string
+	Size    int
+	Pruned  bool
+	Pruning bool // Whether file is currently being pruned
 }
 
 // Title returns the display title for the item
 func (f FileListItem) Title() string {
-	prunedIndicator := ""
-	if f.Pruned {
-		prunedIndicator = " ✓"
+	var indicator string
+	if f.Pruning {
+		indicator = " ⏳"
+	} else if f.Pruned {
+		indicator = " ✓"
 	}
-	return fmt.Sprintf("%s%s", f.Path, prunedIndicator)
+	return fmt.Sprintf("%s%s", f.Path, indicator)
 }
 
 // Description returns the description (file size)
@@ -49,16 +52,19 @@ func formatFileSize(bytes int) string {
 }
 
 // NewFileListModel creates a new file list model from ReviewContext
-func NewFileListModel(reviewCtx *appcontext.ReviewContext) list.Model {
+// pruningFiles may be nil if pruning state is not needed
+func NewFileListModel(reviewCtx *appcontext.ReviewContext, pruningFiles map[string]bool) list.Model {
 	items := make([]list.Item, 0, len(reviewCtx.FileContents))
 
 	for path, content := range reviewCtx.FileContents {
 		// PrunedFiles is always initialized in builder.go:91
 		_, pruned := reviewCtx.PrunedFiles[path]
+		pruning := pruningFiles != nil && pruningFiles[path]
 		items = append(items, FileListItem{
-			Path:   path,
-			Size:   len(content),
-			Pruned: pruned,
+			Path:    path,
+			Size:    len(content),
+			Pruned:  pruned,
+			Pruning: pruning,
 		})
 	}
 
@@ -83,16 +89,19 @@ func NewFileListModel(reviewCtx *appcontext.ReviewContext) list.Model {
 }
 
 // UpdateFileListModel updates the file list model with current pruned state
-func UpdateFileListModel(l list.Model, reviewCtx *appcontext.ReviewContext) list.Model {
+// pruningFiles may be nil if pruning state is not needed
+func UpdateFileListModel(l list.Model, reviewCtx *appcontext.ReviewContext, pruningFiles map[string]bool) list.Model {
 	items := make([]list.Item, 0, len(reviewCtx.FileContents))
 
 	for path, content := range reviewCtx.FileContents {
 		// PrunedFiles is always initialized in builder.go:91
 		_, pruned := reviewCtx.PrunedFiles[path]
+		pruning := pruningFiles != nil && pruningFiles[path]
 		items = append(items, FileListItem{
-			Path:   path,
-			Size:   len(content),
-			Pruned: pruned,
+			Path:    path,
+			Size:    len(content),
+			Pruned:  pruned,
+			Pruning: pruning,
 		})
 	}
 

@@ -3,7 +3,7 @@
 ## Design Principles & Coding Standards
 
 > **Reference:** All design principles, coding standards, and implementation guidelines are defined in [
-`.cursor/rules/rules.mdc`](../.cursor/rules/rules.mdc).
+> `.cursor/rules/rules.mdc`](../.cursor/rules/rules.mdc).
 
 ### How To Apply These Rules
 
@@ -19,8 +19,10 @@ frontmatter, which ensures:
 1. **Global Fix:** Search codebase (`rg`/`fd`) for similar patterns/implementations. Fix **all** occurrences, not just
    the reported one.
 2. **Documentation:**
-  - Update "Known Bugs" table (Status: Fixed).
-  - Update coding standards in `.cursor/rules/rules.mdc` if the bug reflects a common anti-pattern.
+
+- Update "Known Bugs" table (Status: Fixed).
+- Update coding standards in `.cursor/rules/rules.mdc` if the bug reflects a common anti-pattern.
+
 3. **Testing:** Verify edge cases: Interactive, Piped (`|`), Redirected (`<`), and Non-interactive modes.
 
 > **Reference:** Bug Fix Protocol are defined in [`.cursor/rules/rules.mdc`](../.cursor/rules/rules.mdc).
@@ -131,7 +133,7 @@ frontmatter, which ensures:
 
 - [x] Replace `msg.String()` key comparisons with `key.Matches()` using centralized `KeyMap` structs
 - [x] Decompose monolithic `Update` function into state-specific handlers (`updateKeyMsgReviewing`,
-  `updateKeyMsgChatting`, etc.)
+      `updateKeyMsgChatting`, etc.)
 - [x] Decompose monolithic `View` function into state-specific renderers (`viewLoading`, `viewMain`, `viewError`)
 - [x] Centralize yank chord state reset logic
 
@@ -148,7 +150,7 @@ frontmatter, which ensures:
 - [x] Update Coding Styles with TUI key-handling and feature-removal guidelines
 - [x] Update help text and footer to remove code block references
 - [x] Refactor `CalculateViewportHeight` to derive search/chat state from `State` enum instead of redundant boolean
-  parameters
+      parameters
 - [x] Add error logging for markdown rendering fallbacks to maintain visibility during development
 
 ---
@@ -166,9 +168,9 @@ frontmatter, which ensures:
   - Select Focus Areas (Security, Performance, Logic, Style, Typo, Naming).
   - Negative constraints (what to ignore).
 - [x] **Smart Context:** If the user asks for "Security," automatically inject the `security` preset rules into the
-  system prompt.
+      system prompt.
 - [x] **Intent Integration:** Intent collected via `ui.CollectIntent()` in `cmd/review.go`, passed to
-  `Builder.WithIntent()`, merged into system prompt via `BuildSystemPromptWithIntent()`.
+      `Builder.WithIntent()`, merged into system prompt via `BuildSystemPromptWithIntent()`.
 
 #### 🧠 Context Pruning (Dynamic Ignore) ✅
 
@@ -180,10 +182,11 @@ frontmatter, which ensures:
   5. **Benefit:** Saves massive tokens for the _next_ turn of chat while keeping the "map" of the code.
 - [x] **File List Navigation:** Vim-style navigation (`j/k`) through files, visual indicator (✓) for pruned files.
 - [x] **Pruning Integration:** `PrunedFiles` map in `ReviewContext`, used by `BuildReviewPromptWithPruning()` in prompt
-  template.
+      template.
 - [x] **Negative Prompting:** Negative constraints collected in intent form, added to system prompt as "User explicitly stated to ignore: [constraints]".
 
 #### Gemini New Provider
+
 - [x] Migrating Gemini provider
 - [x] Toggle Enable Web Search on each request as checkbox, can be changed in follow-ups questions as well (default = true)
 
@@ -217,49 +220,101 @@ frontmatter, which ensures:
 
 Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 
-# v0.4.0 - Responsive control
-**Status:** Planned (Scalable Standard)
+# v0.4.0 - Responsive control ✅
 
-### 1. Interaction & Feedback
+**Status:** Completed
 
-* [ ] **Async Pruning with Enhanced Feedback:** Implement `tea.Cmd` with file-specific spinner and non-blocking UI for other actions. Consider subtle progress for long operations.
-* [ ] **Robust Cancellation (`Ctrl+X`):** Propagate `context.WithCancel` through all long-running operations; ensure immediate UI feedback and clean state on cancellation.
-* [ ] **Guided Intent Input:** Upgrade `huh` form for custom text intent with validation and dynamic suggestions/auto-completion for focus areas.
+### 1. Interaction & Feedback ✅
+
+- [x] **Async Pruning with Enhanced Feedback:** Implement `tea.Cmd` with file-specific spinner and non-blocking UI for other actions. Consider subtle progress for long operations.
+  - Per-file spinners in file list (⏳ indicator when pruning)
+  - Non-blocking: file list navigation works during pruning
+  - Multiple files can be pruned simultaneously with individual spinners
+  - Spinner state tracked in `pruningSpinners map[string]spinner.Model`
+- [x] **Robust Cancellation (`Ctrl+X`):** Propagate `context.WithCancel` through all long-running operations; ensure immediate UI feedback and clean state on cancellation.
+  - Ctrl+X works in all states (loading, file list, chatting, reviewing)
+  - Cancels all active pruning operations
+  - Immediate UI feedback with cancellation message
+  - Clean state cleanup on cancellation
+- [x] **Guided Intent Input:** Upgrade `huh` form for custom text intent with validation and dynamic suggestions/auto-completion for focus areas.
+  - Custom instruction validation (minimum 10 chars if provided, or empty)
+  - Improved field descriptions with examples
+  - Placeholder text for negative constraints field
+  - Better UX guidance in form descriptions
 
 ### 2. DevOps & CI/CD
 
-* [ ] **Actionable Security Workflow:** Integrate OpenSSF Scorecard (`scorecard.yaml`) in CI; explore `revcli` consumption for in-terminal insights.
-* [ ] **Secure Release Automation:** Configure GoReleaser (`.goreleaser.yaml`) for multi-platform builds, Homebrew tap, and integrate Cosign for artifact signing.
-* [ ] **Fast & Comprehensive CI Pipeline:** Add `golangci-lint` (strict config) and `go test -race`; optimize for speed and provide local pre-commit targets.
+- [ ] **Actionable Security Workflow:** Integrate OpenSSF Scorecard (`scorecard.yaml`) in CI; explore `revcli` consumption for in-terminal insights.
+- [ ] **Secure Release Automation:** Configure GoReleaser (`.goreleaser.yaml`) for multi-platform builds, Homebrew tap, and integrate Cosign for artifact signing.
+- [ ] **Fast & Comprehensive CI Pipeline:** Add `golangci-lint` (strict config) and `go test -race`; optimize for speed and provide local pre-commit targets.
+
+# v0.4.0.1 - Code Quality Refactoring ✅
+
+**Status:** Completed
+
+## Refactoring Completed
+
+### File Size Optimization
+- **Split `update.go`:** Reduced from 346 lines to 172 lines by extracting:
+  - `update_stream.go` - Stream message handlers (`handleStreamMessages`, `handleSpinnerTick`)
+  - `update_feedback.go` - Feedback message handlers (`handleYankMessages`, `handlePruneMessages`, `handleChatMessages`, `handleReviewMessages`)
+  - `update.go` - Main dispatcher and common handlers remain
+
+### Code Duplication Elimination
+- **Consolidated file list functions:** Merged duplicated `*WithPruningState` variants:
+  - `NewFileListModel` now accepts optional `pruningFiles` parameter (nil when not needed)
+  - `UpdateFileListModel` now accepts optional `pruningFiles` parameter (nil when not needed)
+  - Removed `NewFileListModelWithPruningState` and `UpdateFileListModelWithPruningState`
+  - Updated all call sites (5 locations) to use consolidated functions
+
+### Rules Updated
+- Added anti-pattern guidance: Prefer optional parameters over "With*" function variants to avoid duplication
 
 # v0.4.1 - Structured Intelligence
 
 ### Bugs
+
 - [ ] Change keymap for toggle Web Search
 
 ### Core features
 
 #### 1. Core Logic & Data Structure (Prerequisite)
 
-* [ ] **Define Schema:** Implement `ReviewIssue` struct and map it to **OpenAPI 3.0** schema.
-* [ ] **Tool Configuration:** Configure `submit_review` tool to force **deterministic** JSON output.
-* [ ] **JSON Unmarshaling:** Implement logic to bridge `map[string]interface{}` responses back to strict Go structs.
-* [ ] **Safe Fallback:** Handle cases where the model refuses to call the function (fallback to text).
+- [ ] **Define Schema:** Implement `ReviewIssue` struct and map it to **OpenAPI 3.0** schema.
+- [ ] **Tool Configuration:** Configure `submit_review` tool to force **deterministic** JSON output.
+- [ ] **JSON Unmarshaling:** Implement logic to bridge `map[string]interface{}` responses back to strict Go structs.
+- [ ] **Safe Fallback:** Handle cases where the model refuses to call the function (fallback to text).
 
 #### 2. TUI & Visualization (UX Focused)
 
-* [ ] **List View:** Replace Markdown viewport with `bubbles/list` for navigable issue tracking.
-* [ ] **Custom Delegate:** Implement `lipgloss` rendering for colored Severity pills and Category tags.
-* [ ] **Detail State:** Create `StateDetailView` (Enter key) to render full suggestion/context using Glamour.
-* [ ] **Token Transparency:** Extract `UsageMetadata` from JSON response; display "Tokens In/Out & Cost" in list footer.
+- [ ] **List View:** Replace Markdown viewport with `bubbles/list` for navigable issue tracking.
+- [ ] **Custom Delegate:** Implement `lipgloss` rendering for colored Severity pills and Category tags.
+- [ ] **Detail State:** Create `StateDetailView` (Enter key) to render full suggestion/context using Glamour.
+- [ ] **Token Transparency:** Extract `UsageMetadata` from JSON response; display "Tokens In/Out & Cost" in list footer.
 
 ### Planned features
+
+#### Go AST Integration
+
+- [ ] **Symbolic Mapping:** Map `git diff` hunks to `ast.Node` boundaries (FuncDecl, TypeDecl) using `go/parser`.
+- [ ] **Context Hoisting:** Automatically inject full parent `struct` and `interface` definitions into prompts when methods are modified to prevent type hallucinations.
+- [ ] **Signature Extraction:** Feed exact function signatures and field types into the LLM to ensure suggestions respect existing API contracts.
+- [ ] **Semantic Impact:** Use `go/types` for cross-package dependency analysis to detect downstream breaking changes.
+- [ ] **AST-Based Patching:** Transition from `diff` patches to `github.com/dave/dst` for format-preserving, type-safe code generation.
+- [ ] **Pre-flight Validation:** Run `parser.ParseSource` on LLM suggestions to verify syntactical correctness before displaying in TUI.
+
+#### Smart Read
+- Add mode to read codebase and adapt styles
+
 #### Context Intelligence
-* [ ] **Dependency Graph:** Implement Regex-based import scanning to find "Related Context" (files that import the changed code).
-* [ ] **Smart Pruning:** Feed "Related Context" summaries into the prompt to detect breaking changes in other files.
+
+- [ ] **Dependency Graph:** Implement Regex-based import scanning to find "Related Context" (files that import the changed code).
+- [ ] **Smart Pruning:** Feed "Related Context" summaries into the prompt to detect breaking changes in other files.
+
 #### Refactoring
-* [ ] **`samber/lo` Integration:** Refactor slice logic in `diff` and `review` packages using declarative pipelines (Filter, Map).
-* [ ] **Ignore Management:** Implement `.revignore` support (using `samber/lo` to filter).
+
+- [ ] **`samber/lo` Integration:** Refactor slice logic in `diff` and `review` packages using declarative pipelines (Filter, Map).
+- [ ] **Ignore Management:** Implement `.revignore` support (using `samber/lo` to filter).
 
 # v0.4.2 - Panes & Export (Lazy-git Style)
 
@@ -268,6 +323,7 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 **Features:**
 
 ### The "Lazy" Experience (UX)
+
 - [ ] **Interactive Patching:** `Apply` button that actually writes code.
 - [ ] **Panes:** Reviews | Chat | Config (Tab to switch).
 
@@ -379,7 +435,7 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 - [ ] Interactive file/folder selection with Vim navigation
 - [ ] Read from controller, serializers, routers
 - [ ] After implemented `build mode`, bring file/folder selection feature in `review mode`: add option to include other
-  files than git diff. Interactive files/folders selection like `build mode`
+      files than git diff. Interactive files/folders selection like `build mode`
 
 ### Team Features
 
@@ -426,11 +482,18 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 
 > Raw ideas for future consideration
 
+**Intent Driven**
+
+- Add model selection
+- Add preset selection
+
 **Unit Test**
+
 - Have an option in review mode to generate unit test
 - Dedicated command to generate Unit Test (build/test)
 
 **File mention**
+
 - Prompt for choosing files when type `@`
 - Can choose files to mention when first enter
 
