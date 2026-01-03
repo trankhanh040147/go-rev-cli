@@ -28,8 +28,8 @@ import (
 	"charm.land/fantasy/providers/openai"
 	"charm.land/fantasy/providers/openrouter"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/trankhanh040147/revcli/internal/agent/hyper"
 	"github.com/trankhanh040147/revcli/internal/agent/tools"
 	"github.com/trankhanh040147/revcli/internal/config"

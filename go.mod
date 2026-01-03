@@ -6,7 +6,7 @@ require (
 	charm.land/bubbles/v2 v2.0.0-rc.1
 	charm.land/bubbletea/v2 v2.0.0-rc.2
 	charm.land/fantasy v0.5.5
-	charm.land/lipgloss/v2 v2.0.0-beta.3.0.20251106193318-19329a3e8410
+	charm.land/lipgloss/v2 v2.0.0-beta.3.0.20251205162909-7869489d8971
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/PuerkitoBio/goquery v1.11.0
@@ -24,11 +24,10 @@ require (
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
-	github.com/charmbracelet/lipgloss/v2 v2.0.0-beta1
-	github.com/charmbracelet/ultraviolet v0.0.0-20251116181749-377898bcce38
-	github.com/charmbracelet/x/ansi v0.11.1
+	github.com/charmbracelet/ultraviolet v0.0.0-20251205161215-1948445e3318
+	github.com/charmbracelet/x/ansi v0.11.3
 	github.com/charmbracelet/x/etag v0.2.0
-	github.com/charmbracelet/x/exp/charmtone v0.0.0-20250603201427-c31516f43444
+	github.com/charmbracelet/x/exp/charmtone v0.0.0-20251215102626-e0db08df7383
 	github.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f
 	github.com/charmbracelet/x/exp/ordered v0.1.0
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250904123553-b4e2667e5ad5
@@ -100,12 +99,12 @@ require (
 	github.com/bytedance/sonic/loader v0.4.0 // indirect
 	github.com/catppuccin/go v0.3.0 // indirect
 	github.com/charmbracelet/anthropic-sdk-go v0.0.0-20251024181547-21d6f3d9a904 // indirect
-	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
+	github.com/charmbracelet/x/cellbuf v0.0.14 // indirect
 	github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect
 	github.com/charmbracelet/x/json v0.2.0 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
-	github.com/clipperhouse/displaywidth v0.5.0 // indirect
+	github.com/clipperhouse/displaywidth v0.6.1 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
@@ -187,3 +186,6 @@ require (
 	google.golang.org/grpc v1.76.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 )
+
+// replace github.com/charmbracelet/lipgloss/v2 => charm.land/lipgloss/v2 v2.0.0-beta.3.0.20251106193318-19329a3e8410
+replace github.com/charmbracelet/lipgloss/v2 => charm.land/lipgloss/v2 v2.0.0-beta.3.0.20251205162909-7869489d8971

@@ -7,8 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/sync/errgroup"
 
-	appcontext "github.com/trankhanh040147/revcli/internal/context"
 	"github.com/trankhanh040147/revcli/internal/app"
+	appcontext "github.com/trankhanh040147/revcli/internal/context"
 	"github.com/trankhanh040147/revcli/internal/message"
 	"github.com/trankhanh040147/revcli/internal/prompt"
 )
@@ -54,7 +54,7 @@ func streamReviewCmd(ctx context.Context, appInstance *app.App, sessionID, userP
 
 		// Start coordinator in goroutine
 		g, gCtx := errgroup.WithContext(ctx)
-		
+
 		// Subscribe to messages
 		messageEvents := appInstance.Messages.Subscribe(gCtx)
 		messageReadBytes := make(map[string]int)
