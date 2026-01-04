@@ -248,13 +248,7 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 - [ ] **Secure Release Automation:** Configure GoReleaser (`.goreleaser.yaml`) for multi-platform builds, Homebrew tap, and integrate Cosign for artifact signing.
 - [ ] **Fast & Comprehensive CI Pipeline:** Add `golangci-lint` (strict config) and `go test -race`; optimize for speed and provide local pre-commit targets.
 
-# v0.5.0 - Agent Architecture (?)
-
-- Adapt Agent Architecture like `https://github.com/trankhanh040147/revcli`
-- Rewrite tools and refactor codes 
-
-
-# v0.6.0 - Code Quality Refactoring ✅
+# v0.4.1 - Code Quality Refactoring ✅
 
 **Status:** Completed
 
@@ -276,11 +270,99 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 ### Rules Updated
 - Added anti-pattern guidance: Prefer optional parameters over "With*" function variants to avoid duplication
 
-# v0.7.0 - Structured Intelligence
 
-### Bugs
+## v0.5.0 - Agent Architecture ✅
 
-- [ ] Change keymap for toggle Web Search
+**Status:** Completed
+
+**Features Implemented:**
+
+- [x] **Coordinator Architecture:** Refactored to use Coordinator architecture to manage agent flow
+  - [x] Implemented `Coordinator` interface and struct
+  - [x] Integrated with Fantasy library for agent streaming
+  - [x] Session management with agent execution
+  - [x] Tool execution and callback handling
+
+**Known Issues:**
+
+- [ ] Fix: infinite loading: ⢿  Analyzing your code changes... (spinner stuck during review)
+
+## Coordinator Architecture
+
+```mermaid
+sequenceDiagram
+	participant Client
+	participant Coordinator
+	participant SessionAgent
+	participant FantasyLib
+	participant DataServices
+
+	Client->>Coordinator: Run(sessionID, prompt)
+	Coordinator->>SessionAgent: Run(SessionAgentCall)
+	SessionAgent->>FantasyLib: agent.Stream(callbacks)
+	activate FantasyLib
+	FantasyLib-->>SessionAgent: OnTextDelta(chunk)
+	SessionAgent->>DataServices: messages.Update(message)
+	FantasyLib-->>SessionAgent: OnToolCall(tool_call)
+	SessionAgent->>DataServices: messages.Update(message)
+	Note right of SessionAgent: Tool is executed
+	FantasyLib-->>SessionAgent: OnToolResult(result)
+	SessionAgent->>DataServices: messages.Create(tool_result_message)
+	FantasyLib-->>SessionAgent: OnStepFinish(usage)
+	deactivate FantasyLib
+	SessionAgent->>DataServices: sessions.Save(session_with_cost)
+	SessionAgent-->>Coordinator: *fantasy.AgentResult
+	Coordinator-->>Client: *fantasy.AgentResult
+```
+
+# v0.6.0 - Config Providers
+
+**Status:** Planned
+
+**Features:**
+
+### TUI: Config
+- [ ] Handle create config on first use
+- [ ] Interactive config setup flow
+
+### Command: Config
+- [ ] `config` command to manually change default settings
+- [ ] `config`: handle refactor func `LoadConfig`
+- [ ] Support for multiple config providers/sources
+
+### Refactoring
+- [ ] Rename `crush` --> `revcli` (residual references)
+
+# v0.7.0 - Functional Calling
+
+**Status:** Planned
+
+**Features:**
+
+### Tools & Templates
+- [ ] Write tools & templates:
+  - [ ] Review changes
+  - [ ] Read file
+  - [ ] Prune context
+- [ ] Tool execution UI feedback
+- [ ] Tool result visualization
+
+# v0.8.0 - TUI Enhance
+
+**Status:** Planned
+
+**Features:**
+
+### Tool Execution Visibility
+- [ ] Show tool results (what tools it uses) while loading
+- [ ] Real-time tool call indicators
+- [ ] Tool execution progress display
+
+---
+
+# v0.9.0 - Structured Intelligence 
+
+**Status:** Planned
 
 ### Core features
 
@@ -322,7 +404,7 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 - [ ] **`samber/lo` Integration:** Refactor slice logic in `diff` and `review` packages using declarative pipelines (Filter, Map).
 - [ ] **Ignore Management:** Implement `.revignore` support (using `samber/lo` to filter).
 
-# v0.8.0 - Panes & Export (Lazy-git Style)
+# v0.x - Panes & Export 
 
 **Status:** Planned
 
@@ -369,7 +451,7 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 
 ---
 
-# v0.9.0 - Power User Features
+# v0.x - Power User Features 
 
 **Status:** Future
 
@@ -394,7 +476,7 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 - [ ] `--list-models` - Show available models
 - [ ] Token cost estimation
 
-# v0.6 - Code Block Management (Deferred)
+# v0.x - Code Block Management (Deferred)
 
 **Status:** Deferred
 
