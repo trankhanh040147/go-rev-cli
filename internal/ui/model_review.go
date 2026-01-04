@@ -4,6 +4,8 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"golang.org/x/sync/errgroup"
@@ -58,23 +60,29 @@ func streamReviewCmd(ctx context.Context, appInstance *app.App, sessionID, userP
 		errChan := make(chan error, 10)
 		doneChan := make(chan string, 1)
 
+		// Create separate context for message subscription that can be cancelled independently
+		msgCtx, msgCancel := context.WithCancel(ctx)
+
 		// Start coordinator in goroutine
 		g, gCtx := errgroup.WithContext(ctx)
 
-		// Subscribe to messages
-		messageEvents := appInstance.Messages.Subscribe(gCtx)
+		// Subscribe to messages with separate context
+		messageEvents := appInstance.Messages.Subscribe(msgCtx)
 		messageReadBytes := make(map[string]int)
 		var fullResponse strings.Builder
+		var fullResponseMutex sync.Mutex
 
-		// Goroutine to handle message events
-		g.Go(func() error {
+		// Message subscription goroutine - NOT in errgroup
+		messageDone := make(chan struct{})
+		go func() {
+			defer close(messageDone)
 			for {
 				select {
-				case <-gCtx.Done():
-					return gCtx.Err()
+				case <-msgCtx.Done():
+					return
 				case event, ok := <-messageEvents:
 					if !ok {
-						return nil
+						return
 					}
 					msg := event.Payload
 					// Filter by sessionID and assistant role
@@ -89,49 +97,99 @@ func streamReviewCmd(ctx context.Context, appInstance *app.App, sessionID, userP
 							if readBytes == 0 {
 								chunk = strings.TrimLeft(chunk, " \t")
 							}
+							fullResponseMutex.Lock()
 							fullResponse.WriteString(chunk)
+							fullResponseMutex.Unlock()
 							messageReadBytes[msg.ID] = len(content)
 
 							select {
 							case chunkChan <- chunk:
-							case <-gCtx.Done():
-								return gCtx.Err()
+							case <-msgCtx.Done():
+								return
 							}
 						}
 					}
 				}
 			}
-		})
+		}()
 
-		// Goroutine to run coordinator
+		// Goroutine to run coordinator - this is the only one in errgroup
+		var coordinatorErr error
 		g.Go(func() error {
 			_, err := appInstance.AgentCoordinator.Run(gCtx, sessionID, userPrompt, attachments...)
 			if err != nil {
+				coordinatorErr = err
 				select {
 				case errChan <- err:
 				case <-gCtx.Done():
 				}
 				return err
 			}
-			// Coordinator completed - signal done (fullResponse will be collected from final message)
 			return nil
 		})
 
 		// Wait for completion in background and send done message
 		go func() {
-			if err := g.Wait(); err != nil {
+			// Wait ONLY for coordinator to complete (not message goroutine)
+			waitErr := g.Wait()
+
+			// If coordinator completed successfully, wait a grace period for final messages
+			if waitErr == nil && coordinatorErr == nil {
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			// Cancel message subscription to allow message goroutine to exit
+			msgCancel()
+
+			// Wait for message goroutine to exit (with timeout)
+			select {
+			case <-messageDone:
+				// Message goroutine exited
+			case <-time.After(1 * time.Second):
+				// Timeout - message goroutine didn't exit, continue anyway
+			}
+
+			if waitErr != nil {
 				// Check if it's a cancellation error
-				if err != context.Canceled {
+				if waitErr != context.Canceled {
 					select {
-					case errChan <- err:
+					case errChan <- waitErr:
 					case <-ctx.Done():
 					}
 				}
 				return
 			}
+
+			// Fetch final assistant message from service as fallback to ensure completeness
+			func() {
+				fullResponseMutex.Lock()
+				defer fullResponseMutex.Unlock()
+
+				messages, err := appInstance.Messages.List(ctx, sessionID)
+				if err == nil {
+					// Find the last assistant message for this session
+					for i := len(messages) - 1; i >= 0; i-- {
+						msg := messages[i]
+						if msg.SessionID == sessionID && msg.Role == message.Assistant {
+							content := msg.Content().String()
+							if content != "" {
+								content = strings.TrimLeft(content, " \t")
+								fullResponse.Reset()
+								fullResponse.WriteString(content)
+							}
+							break
+						}
+					}
+				}
+			}()
+
 			// Send final response when coordinator completes
+			fullResponseMutex.Lock()
+			response := fullResponse.String()
+			fullResponseMutex.Unlock()
+
 			select {
-			case doneChan <- fullResponse.String():
+			case doneChan <- response:
 			case <-ctx.Done():
 			}
 		}()

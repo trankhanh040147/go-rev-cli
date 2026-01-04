@@ -285,7 +285,7 @@ Here is the updated **v0.4.0** plan with the completed SDK migration removed.
 
 **Known Issues:**
 
-- [ ] Fix: infinite loading: ⢿  Analyzing your code changes... (spinner stuck during review)
+- [x] Fix: infinite loading: ⢿  Analyzing your code changes... (spinner stuck during review)
 
 ## Coordinator Architecture
 
