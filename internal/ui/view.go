@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/glamour"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/glamour"
 )
 
 // Styles for the UI
