@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 )
 
 // navigatePromptHistory navigates through prompt history in the given direction
@@ -50,13 +50,10 @@ func (m *Model) updateKeyMsgChatting(msg tea.KeyMsg) (*Model, tea.Cmd) {
 				m.textarea.Reset()
 				m.streaming = true
 				m.chatHistory = append(m.chatHistory, ChatMessage{Role: ChatRoleUser, Content: question})
-				// Capture current webSearchEnabled setting for this request, then reset for next question
-				webSearchEnabled := m.webSearchEnabled
-				m.webSearchEnabled = true // Reset to default (true) for next question
 				// Create new context for this command
 				ctx, cancel := context.WithCancel(m.rootCtx)
 				m.activeCancel = cancel
-				return m, SendChatMessage(ctx, m.client, question, webSearchEnabled)
+				return m, SendChatMessage(ctx, m.app, m.sessionID, question)
 			}
 		}
 	case key.Matches(msg, m.keys.PrevPrompt):

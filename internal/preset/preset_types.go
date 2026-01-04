@@ -61,15 +61,15 @@ type Config struct {
 
 // GeminiConfig defines Gemini API client configuration
 type GeminiConfig struct {
-	ModelParams     *ModelParams     `yaml:"model_params,omitempty"`
-	SafetySettings  *SafetySettings  `yaml:"safety_settings,omitempty"`
+	ModelParams    *ModelParams    `yaml:"model_params,omitempty"`
+	SafetySettings *SafetySettings `yaml:"safety_settings,omitempty"`
 }
 
 // ModelParams defines model generation parameters
 type ModelParams struct {
 	Temperature float32 `yaml:"temperature,omitempty"`
-	TopP         float32 `yaml:"top_p,omitempty"`
-	TopK         int     `yaml:"top_k,omitempty"`
+	TopP        float32 `yaml:"top_p,omitempty"`
+	TopK        int     `yaml:"top_k,omitempty"`
 }
 
 // SafetySettings defines safety filtering configuration
@@ -79,4 +79,3 @@ type SafetySettings struct {
 
 // DefaultSafetyThreshold is the default safety threshold value
 const DefaultSafetyThreshold = "HIGH"
-

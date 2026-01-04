@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
+	"github.com/trankhanh040147/revcli/internal/app"
 	appcontext "github.com/trankhanh040147/revcli/internal/context"
-	"github.com/trankhanh040147/revcli/internal/gemini"
 	"github.com/trankhanh040147/revcli/internal/preset"
 )
 
@@ -41,12 +41,11 @@ type Model struct {
 	// Review context
 	reviewCtx *appcontext.ReviewContext
 
-	// Gemini client
-	client       *gemini.Client
-	flashClient  *gemini.Client     // Shared client for prune operations (gemini-flash)
+	// App and session
+	app          *app.App
+	sessionID    string
 	rootCtx      context.Context    // Root context for cancellation chain
 	activeCancel context.CancelFunc // Cancel function for currently active command
-	apiKey       string             // API key for prune operations
 
 	// Review preset
 	preset *preset.Preset
@@ -91,16 +90,16 @@ type Model struct {
 	promptHistoryIndex int      // Current position in history (-1 for new prompt)
 
 	// Pruning state (per-file tracking)
-	pruningFiles    map[string]bool                   // Track which files are currently being pruned
-	pruningSpinners map[string]spinner.Model          // Spinners for each file being pruned
-	pruningCancels  map[string]context.CancelFunc     // Cancel functions for each pruning operation
+	pruningFiles    map[string]bool               // Track which files are currently being pruned
+	pruningSpinners map[string]spinner.Model      // Spinners for each file being pruned
+	pruningCancels  map[string]context.CancelFunc // Cancel functions for each pruning operation
 
 	// Keybindings
 	keys KeyMap
 }
 
 // NewModel creates a new application model
-func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, flashClient *gemini.Client, p *preset.Preset, apiKey string) *Model {
+func NewModel(reviewCtx *appcontext.ReviewContext, appInstance *app.App, sessionID string, p *preset.Preset) *Model {
 	// Create spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -117,21 +116,26 @@ func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, flashC
 	ta.ShowLineNumbers = false
 
 	// Custom textarea styling to avoid white background and row highlighting
-	ta.FocusedStyle.Base = lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#7C3AED"))
-	ta.BlurredStyle.Base = lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#4B5563"))
-	// Remove cursor line highlighting
-	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
-	ta.BlurredStyle.CursorLine = lipgloss.NewStyle()
+	ta.SetStyles(textarea.Styles{
+		Focused: textarea.StyleState{
+			Base: lipgloss.NewStyle().
+				BorderStyle(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#7C3AED")),
+			CursorLine: lipgloss.NewStyle(),
+		},
+		Blurred: textarea.StyleState{
+			Base: lipgloss.NewStyle().
+				BorderStyle(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#4B5563")),
+			CursorLine: lipgloss.NewStyle(),
+		},
+	})
 
 	// Create search input
 	si := textinput.New()
 	si.Placeholder = "Search..."
 	si.CharLimit = 100
-	si.Width = 40
+	si.SetWidth(40)
 
 	// Create renderer (with fallback if it fails)
 	renderer, err := NewRenderer()
@@ -149,11 +153,10 @@ func NewModel(reviewCtx *appcontext.ReviewContext, client *gemini.Client, flashC
 	return &Model{
 		state:              StateLoading,
 		reviewCtx:          reviewCtx,
-		client:             client,
-		flashClient:        flashClient,
+		app:                appInstance,
+		sessionID:          sessionID,
 		rootCtx:            rootCtx,
 		activeCancel:       nil,
-		apiKey:             apiKey,
 		preset:             p,
 		spinner:            s,
 		textarea:           ta,
@@ -182,9 +185,12 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Run starts the Bubbletea program
-func Run(reviewCtx *appcontext.ReviewContext, client *gemini.Client, flashClient *gemini.Client, p *preset.Preset, apiKey string) error {
-	model := NewModel(reviewCtx, client, flashClient, p, apiKey)
-	program := tea.NewProgram(model, tea.WithAltScreen())
+func Run(reviewCtx *appcontext.ReviewContext, appInstance *app.App, sessionID string, p *preset.Preset) error {
+	model := NewModel(reviewCtx, appInstance, sessionID, p)
+	program := tea.NewProgram(model)
+
+	// Subscribe app events to TUI
+	go appInstance.Subscribe(program)
 
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("error running UI: %w", err)
